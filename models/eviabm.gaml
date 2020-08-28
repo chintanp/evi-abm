@@ -14,7 +14,12 @@ global skills: [SQLSKILL] {
 
 	// Batch parameters
 	string simulation_date <- "2019-07-01";
-	int analysis_id <- 77;
+	
+	// Get analysis ID
+	file aidfile <- csv_file("../analysis_id", false);
+	matrix aidm <- matrix(aidfile);
+	
+	int analysis_id <- int(aidm[0,0]);
 	
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
