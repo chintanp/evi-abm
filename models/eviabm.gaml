@@ -265,6 +265,8 @@ global skills: [SQLSKILL] {
 		evse_util_query <- evse_util_query + valq_evse_util;
 		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
+		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
 		write("Time is up");
 		do die;
 	}
@@ -280,6 +282,8 @@ global skills: [SQLSKILL] {
 		evse_util_query <- evse_util_query + valq_evse_util;
 		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
+		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
 		write("all EVs are done");
         do die;
     }
