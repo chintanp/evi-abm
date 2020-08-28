@@ -14,14 +14,19 @@ global skills: [SQLSKILL] {
 
 	// Batch parameters
 	string simulation_date <- "2019-07-01";
-	int analysis_id <- 71;
-	string db_host <- '';
-	string db_type <- '';
-	string db_name <- '';
-	string db_port <- '';
-	string db_user <- '';
-	string db_pwd <- '';
-
+	int analysis_id <- 77;
+	
+	// Database credentials
+	file envfile <- csv_file("../.env", true);
+	matrix dbcredsm <- matrix(envfile);
+	
+	string db_host <- dbcredsm[0, 0];
+	string db_type <- dbcredsm[1, 0];
+	string db_name <- dbcredsm[2, 0];
+	string db_port <- dbcredsm[3, 0];
+	string db_user <- dbcredsm[4, 0];
+	string db_pwd <- dbcredsm[5, 0];
+	
 	// Simulation level
     
     float seed <- 123.0;
@@ -30,7 +35,9 @@ global skills: [SQLSKILL] {
 	date cd <- date("now");
 	int simulation_time <- 24 * 60 * 60; // time for which this simulation will run
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
-	date starting_date <- date(simulation_date); //definition of the date of begining of the simulation - [year,month of the year,day of the month, hour of the day, minute of the hour, second of the minute]
+	// start the simulation based on the sim_start_time from the trip generation 
+	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
+	date starting_date <- date(sim_start_time[2][0][0]);
 	float lookup_distance <- 10 / 0.000621371; // convert miles to m - this is the distance from the road that one looks for charging stations
 	float reconsider_charging_time <- 10.0; // Time in minutes to reconsider charging decision
 	// files
@@ -217,28 +224,33 @@ global skills: [SQLSKILL] {
 	}
 
 	reflex log_EV_agents {
-		string
-		info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, nearest_evse_id, nearest_evses, charging_decision_time) VALUES';
-		point l_4326 <- point(CRS_transform(EVs[0].location, "EPSG:4326"));
-		float latitude <- l_4326.y;
-		float longitude <- l_4326.x;
-		// write(EVs[0].nearest_evse.station_id);
-		string
-		valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_nearby + "', '" + EVs[0].nearest_evse + "', '" + EVs[0].nearest_evses + "', '" + string(EVs[0].charging_decision_time) + "')";
-		loop jj from: 1 to: length(EVs) - 1 {
-			l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
-			latitude <- l_4326.y;
-			longitude <- l_4326.x;
-			valq_info <-
-			valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_nearby + "', '" + EVs[jj].nearest_evse + "', '" + EVs[jj].nearest_evses + "', '" + string(EVs[jj].charging_decision_time) + "')";
+		if (length(EVs) > 0) {
+			string
+			info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, nearest_evse_id, nearest_evses, charging_decision_time) VALUES';
+			point l_4326 <- point(CRS_transform(EVs[0].location, "EPSG:4326"));
+			float latitude <- l_4326.y;
+			float longitude <- l_4326.x;
+			// write(EVs[0].nearest_evse.station_id);
+			string
+			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_nearby + "', '" + EVs[0].nearest_evse + "', '" + EVs[0].nearest_evses + "', '" + string(EVs[0].charging_decision_time) + "')";
+			
+			if (length(EVs) > 1) {
+				loop jj from: 1 to: length(EVs) - 1 {
+					l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
+					latitude <- l_4326.y;
+					longitude <- l_4326.x;
+					valq_info <-
+					valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_nearby + "', '" + EVs[jj].nearest_evse + "', '" + EVs[jj].nearest_evses + "', '" + string(EVs[jj].charging_decision_time) + "')";
+				}
+			}
+	
+			info_query <- info_query + valq_info;
+			do executeUpdate params: DBPARAMS updateComm: info_query;
 		}
-
-		info_query <- info_query + valq_info;
-		do executeUpdate params: DBPARAMS updateComm: info_query;
 	}
-
-	reflex halt when: cycle * step = simulation_time {
-		do pause;
+	// stop the simulation since time is up
+	reflex halting_timeup when: cycle * step = simulation_time {
+		
 		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
 		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
 		loop ii from: 1 to: length(charging_station) - 1 {
@@ -248,7 +260,24 @@ global skills: [SQLSKILL] {
 		evse_util_query <- evse_util_query + valq_evse_util;
 		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		write("Time is up");
+		do die;
 	}
+	
+	// stop the simulation since all EVs are done
+	reflex halting_alldone when: empty (EVs) {
+		
+		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
+		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
+		loop ii from: 1 to: length(charging_station) - 1 {
+			valq_evse_util <- valq_evse_util + ", " + "(" + analysis_id + ", '" + charging_station[ii].station_id + "', " + charging_station[ii].energy_consumed + ")";
+		}
+		evse_util_query <- evse_util_query + valq_evse_util;
+		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
+		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		write("all EVs are done");
+        do die;
+    }
 
 }
 
@@ -467,9 +496,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	// This updates the EV and EVSE attrbutes during charging
 	action charge {
 	// write (name + " charging - " + "using charger - " + nearest_evse);
-		nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60 / 60); // Energy in kWhr
-		SOC <- SOC + (nearest_evse.max_power * step * 100 / capacity / 60 / 60);
-		remaining_range <- remaining_range + (nearest_evse.max_power * step * 100 / 60 / 60 / fuel_consumption);
+		nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60.0 / 60.0); // Energy in kWhr
+		SOC <- SOC + (nearest_evse.max_power * step * 100.0 / capacity / 60.0 / 60.0);
+		remaining_range <- remaining_range + (nearest_evse.max_power * step * 100.0 / 60.0 / 60.0 / fuel_consumption);
 	}
 
 	////////////////////////////////////////////
@@ -842,6 +871,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	}
 
 	state done {
+		do die; // kill the agents after they are done
 	}
 	// This is where we integrate Yan's CCDM 
 	// charge will make sense depending on following factors: 
@@ -1022,7 +1052,7 @@ experiment scenario type: batch parallel: true repeat: 1 keep_seed: true until: 
 
 }
 
-experiment gui_exp until: (time >= simulation_time + 1) {
+experiment gui_exp  {
 
 // Define parameters here if necessary
 // parameter "My parameter" category: "My parameters" var: one_global_attribute;
