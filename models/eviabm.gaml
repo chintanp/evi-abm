@@ -38,7 +38,7 @@ global skills: [SQLSKILL] {
 	// DB Details 
 	map<string, string> DBPARAMS <- [ 'host'::db_host, 'dbtype'::db_type, 'database'::db_name, 'port'::db_port, 'user'::db_user, 'passwd'::db_pwd];
 	date cd <- date("now");
-	int simulation_time <- 24 * 60 * 60; // time for which this simulation will run
+	// int simulation_time <- 24 * 60 * 60; // time for which this simulation will run
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
 	// start the simulation based on the sim_start_time from the trip generation 
 	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
@@ -253,23 +253,27 @@ global skills: [SQLSKILL] {
 			do executeUpdate params: DBPARAMS updateComm: info_query;
 		}
 	}
+	///////////////////////////////////////////
+	// Let the simulation go on untill all the agents die
+	///////////////////////////////////////////
+	
 	// stop the simulation since time is up
-	reflex halting_timeup when: cycle * step = simulation_time {
-		
-		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
-		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
-		loop ii from: 1 to: length(charging_station) - 1 {
-			valq_evse_util <- valq_evse_util + ", " + "(" + analysis_id + ", '" + charging_station[ii].station_id + "', " + charging_station[ii].energy_consumed + ")";
-		}
-
-		evse_util_query <- evse_util_query + valq_evse_util;
-		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
-		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
-		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
-		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
-		write("Time is up");
-		do die;
-	}
+//	reflex halting_timeup when: cycle * step = simulation_time {
+//		
+//		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
+//		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
+//		loop ii from: 1 to: length(charging_station) - 1 {
+//			valq_evse_util <- valq_evse_util + ", " + "(" + analysis_id + ", '" + charging_station[ii].station_id + "', " + charging_station[ii].energy_consumed + ")";
+//		}
+//
+//		evse_util_query <- evse_util_query + valq_evse_util;
+//		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
+//		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+//		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
+//		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
+//		write("Time is up");
+//		do die;
+//	}
 	
 	// stop the simulation since all EVs are done
 	reflex halting_alldone when: empty (EVs) {
@@ -297,7 +301,7 @@ species road schedules: [] {
 	rgb road_color <- #red;
 
 	aspect geom {
-		draw shape color: road_color; // (maxspeed >= 60 #miles / #hour) ? #yellow : (((maxspeed >= 50 #miles / #hour) ? road_color : ((maxspeed >= 30 #miles / #hour) ? #green : #blue))); 
+		draw shape color: road_color; // (maxspeed >= 60 #miles / #hour) charging_decision_time? #yellow : (((maxspeed >= 50 #miles / #hour) ? road_color : ((maxspeed >= 30 #miles / #hour) ? #green : #blue))); 
 	}
 
 	aspect geom3D {
@@ -565,11 +569,15 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						list<charging_station> other_evse <- nearest_evses - [nearest_evse];
 						// write(other_evse);
 						float dist_next_charger <- with_precision(distance_to(self, other_evse[0]), 1);
-						//					write (remaining_range / 0.000621371);
-						//					write (dist_next_charger);
-						if (remaining_range / 0.000621371 < dist_next_charger) {
-							must_charge_now <- true;
+						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						// TODO: maybe add the distance to tarrget condition as well, if it must charge
+						// This can potentially lead to charging when not needed. 
+						if (remaining_range / 0.000621371 < dist_dest ) {
+							if (remaining_range / 0.000621371 < dist_next_charger) {
+								must_charge_now <- true;
+							}
 						}
+
 
 					} else {
 					//					write ("In else");
@@ -587,7 +595,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				}
 
 				if (dont_charge_now = false) {
-					if (SOC <= MIN_SOC_CHARGING and must_charge_now = true) {
+					// always charge if you cant make it to the destination or the next station
+					if (must_charge_now = true) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
@@ -1016,7 +1025,7 @@ species charging_station {
 
 }
 
-experiment scenario type: batch parallel: true repeat: 1 keep_seed: true until: (time >= simulation_time + 1) {
+experiment scenario type: batch parallel: true repeat: 1 keep_seed: true {
 	parameter var: simulation_date among: ["2019-07-01"];
 
 	reflex end_of_runs {
