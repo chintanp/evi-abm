@@ -632,6 +632,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			}
 
 			charging_decision_time <- date(1, 1, 1);
+			must_charge_now <- false; // reset to origin, as otherwise this causes infinite loop at chargers
 		}
 		// transition to: driving when: nearest_evse = nil;
 		transition to: stranded when: SOC <= SOC_MIN;
