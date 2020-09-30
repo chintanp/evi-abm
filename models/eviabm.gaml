@@ -576,6 +576,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 							if (remaining_range / 0.000621371 < dist_next_charger) {
 								must_charge_now <- true;
 							}
+						} else {
+							dont_charge_now <- true;
 						}
 
 
@@ -744,6 +746,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 			}
 
+		} else if (length(nearest_evse.waiting_evs) > 0) {
+			goto_wait <- true;
 		} else if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
 		// Note starting SOC the first time we start charging
 		// this block will be run only once when we start charging 
@@ -753,7 +757,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		}
 
 		// transition to: locate_charger when: find_another_charger = true;
-		transition to: waiting when: wait_for_charger = true {
+		transition to: waiting when: goto_wait = true {
 			add self to: nearest_evse.waiting_evs;
 		}
 
@@ -773,13 +777,19 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		enter {
 			bool ok_to_charge;
 			if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
-				starting_SOC <- SOC;
-				charge_start_time <- string(current_date);
-				// make this plug in use
-				nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
-				ok_to_charge <- true;
+
 				if (nearest_evse.waiting_evs contains self) {
+					
+					starting_SOC <- SOC;
+					charge_start_time <- string(current_date);
+					// make this plug in use
+					nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
+					ok_to_charge <- true;
 					remove self from: nearest_evse.waiting_evs;
+				} else if (length(nearest_evse.waiting_evs) > 0) {
+					ok_to_charge <- false;
+				} else {
+					ok_to_charge <- true;
 				}
 
 			} else {
