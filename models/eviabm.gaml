@@ -777,18 +777,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		enter {
 			bool ok_to_charge;
 			if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
-
+                // when this EV comes from waiting state
 				if (nearest_evse.waiting_evs contains self) {
-					
-					starting_SOC <- SOC;
-					charge_start_time <- string(current_date);
-					// make this plug in use
-					nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
 					ok_to_charge <- true;
 					remove self from: nearest_evse.waiting_evs;
-				} else if (length(nearest_evse.waiting_evs) > 0) {
+				} else if (length(nearest_evse.waiting_evs) > 0) { // if from some other state, but there are other EVs waiting
 					ok_to_charge <- false;
-				} else {
+				} else { // if there are no EVs waiting
 					ok_to_charge <- true;
 				}
 
@@ -799,7 +794,11 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		}
 
 		if (ok_to_charge = true) {
-		// Perform charge
+		    starting_SOC <- SOC;
+		    charge_start_time <- string(current_date);
+			// make this plug in use
+			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
+			// Perform charge
 			do charge;
 		}
 
