@@ -746,14 +746,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 			}
 
-		} else if (length(nearest_evse.waiting_evs) > 0) {
-			goto_wait <- true;
 		} else if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
-		// Note starting SOC the first time we start charging
-		// this block will be run only once when we start charging 
-		// write("setting the starting soc");
-			ok_to_charge <- true;
-			// write (name + " started charging - " + "using charger - " + nearest_evse);
+			
+			if (length(nearest_evse.waiting_evs) = 0) {
+				ok_to_charge <- true;
+			} else if (length(nearest_evse.waiting_evs) > 0) {
+			     goto_wait <- true;
+			} 
 		}
 
 		// transition to: locate_charger when: find_another_charger = true;
@@ -777,6 +776,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		enter {
 			bool ok_to_charge;
 			if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
+				
+				starting_SOC <- SOC;
+		    	charge_start_time <- string(current_date);
                 // when this EV comes from waiting state
 				if (nearest_evse.waiting_evs contains self) {
 					ok_to_charge <- true;
@@ -794,8 +796,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		}
 
 		if (ok_to_charge = true) {
-		    starting_SOC <- SOC;
-		    charge_start_time <- string(current_date);
+
 			// make this plug in use
 			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
 			// Perform charge
@@ -880,13 +881,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		}
 
 		if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count and first(nearest_evse.waiting_evs) = self) {
-		// Note starting SOC the first time we start charging
-		// this block will be run only once when we start charging 
-		// write("setting the starting soc");
-			list<string> vids;
-			//			loop ji from: 0 to: length(nearest_evse.waiting_evs) - 1  {
-			//				add nearest_evse.waiting_evs[ji].veh_ID to: vids;
-			//			}
+
 			ok_to_charge <- true;
 			string ev_waiting_query <- 'UPDATE evse_evs_waiting set wait_end_time = ';
 			string
