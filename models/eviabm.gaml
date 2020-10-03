@@ -38,7 +38,7 @@ global skills: [SQLSKILL] {
 	// DB Details 
 	map<string, string> DBPARAMS <- [ 'host'::db_host, 'dbtype'::db_type, 'database'::db_name, 'port'::db_port, 'user'::db_user, 'passwd'::db_pwd];
 	date cd <- date("now");
-	// int simulation_time <- 24 * 60 * 60; // time for which this simulation will run
+	int simulation_time <- 2 * 24 * 60 * 60; // time for which this simulation will run
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
 	// start the simulation based on the sim_start_time from the trip generation 
 	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
@@ -258,22 +258,22 @@ global skills: [SQLSKILL] {
 	///////////////////////////////////////////
 	
 	// stop the simulation since time is up
-//	reflex halting_timeup when: cycle * step = simulation_time {
-//		
-//		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
-//		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
-//		loop ii from: 1 to: length(charging_station) - 1 {
-//			valq_evse_util <- valq_evse_util + ", " + "(" + analysis_id + ", '" + charging_station[ii].station_id + "', " + charging_station[ii].energy_consumed + ")";
-//		}
-//
-//		evse_util_query <- evse_util_query + valq_evse_util;
-//		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
-//		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
-//		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
-//		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
-//		write("Time is up");
-//		do die;
-//	}
+	reflex halting_timeup when: cycle * step = simulation_time {
+		
+		string evse_util_query <- 'INSERT INTO evse_util (analysis_id, evse_id, util_val) VALUES';
+		string valq_evse_util <- "(" + analysis_id + ", '" + charging_station[0].station_id + "', " + charging_station[0].energy_consumed + ")";
+		loop ii from: 1 to: length(charging_station) - 1 {
+			valq_evse_util <- valq_evse_util + ", " + "(" + analysis_id + ", '" + charging_station[ii].station_id + "', " + charging_station[ii].energy_consumed + ")";
+		}
+
+		evse_util_query <- evse_util_query + valq_evse_util;
+		do executeUpdate params: DBPARAMS updateComm: evse_util_query;
+		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		string status_upd_query <- "update analysis_record set status = 'solved' where analysis_id = " + analysis_id;
+		do executeUpdate params: DBPARAMS updateComm: status_upd_query;
+		write("Time is up");
+		do die;
+	}
 	
 	// stop the simulation since all EVs are done
 	reflex halting_alldone when: empty (EVs) {
@@ -777,15 +777,22 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			bool ok_to_charge;
 			if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
 				
-				starting_SOC <- SOC;
-		    	charge_start_time <- string(current_date);
+
                 // when this EV comes from waiting state
 				if (nearest_evse.waiting_evs contains self) {
 					ok_to_charge <- true;
 					remove self from: nearest_evse.waiting_evs;
+					starting_SOC <- SOC;
+		    		charge_start_time <- string(current_date);
+		    		// make this plug in use
+					nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
 				} else if (length(nearest_evse.waiting_evs) > 0) { // if from some other state, but there are other EVs waiting
 					ok_to_charge <- false;
 				} else { // if there are no EVs waiting
+					starting_SOC <- SOC;
+		    		charge_start_time <- string(current_date);
+		    		// make this plug in use
+					nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
 					ok_to_charge <- true;
 				}
 
@@ -797,8 +804,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		if (ok_to_charge = true) {
 
-			// make this plug in use
-			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use + 1;
 			// Perform charge
 			do charge;
 		}
