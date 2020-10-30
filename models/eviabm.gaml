@@ -64,6 +64,11 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
 	where e.analysis_id =' + analysis_id + ' order by e.veh_id::int';
+	
+	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
+							join sim_params sp on sp.param_id = ap.param_id
+							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
+							order by ap.param_id asc;";
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//////************  Feasibility check(s) has to be done again when charging infrastructure is updated ************////////////
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +109,31 @@ global skills: [SQLSKILL] {
 	list<point> plot_cpts;
 
 	init {
+		
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
+		write("Initiating new simulation");
+		// Read in the params from the DB
+		list<list<list>> params <- list<list<list>>(select(DBPARAMS, param_query));
+		// Assign the parameters as read from the DB
+		seed <- float(params[2][0][2]);
+		lookup_distance <- float(params[2][2][2]) / 0.000621371;
+		step <- float(params[2][3][2]) #mn;
+		reconsider_charging_time <- float(params[2][4][2]);
+		SOC_MAX <- int(params[2][5][2]);
+		SOC_MIN <- int(params[2][6][2]);
+		MIN_SOC_CHARGING <- int(params[2][7][2]);
+		MAX_SOC_CHARGING <- int(params[2][8][2]);
+		BLOCK_SIZE <- float(params[2][9][2]);
+		write("Seed: " + seed);
+		write("lookup_distance: " + lookup_distance);
+		write("step: " + step);
+		write("reconsider_charging_time: " + reconsider_charging_time);
+		write("SOC_MAX: " + SOC_MAX);
+		write("SOC_MIN: " + SOC_MIN);
+		write("MIN_SOC_CHARGING: " + MIN_SOC_CHARGING);
+		write("MAX_SOC_CHARGING: " + MAX_SOC_CHARGING);
+		write("BLOCK_SIZE: " + BLOCK_SIZE);
+		
 		// Create roads from the shapefile 
 		// Reading attributes 'Spd' and 'ID', to add more attributes, go to R, or QGIS		
 		// create road from: select(PARAMS, shp_query) with: [maxspeed::"spd", road_ID::"id", shape::"geom"];
