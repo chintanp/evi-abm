@@ -395,6 +395,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// write(self.location);
 		// write(the_target);
 		shortest_path <- path_between(road_network_driving, self, the_target);
+		
 		// write(shortest_path);
 		trip_distance <- shortest_path.shape.perimeter * 0.000621371;
 		plot_shortest_path <- shortest_path;
@@ -403,7 +404,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		chargers_nearby <- (compat_chargers overlapping (shortest_path.shape + lookup_distance));
 		// write(chargers_nearby);
 		// Get a list of points on path
-		pts_on_path <- geometry(shortest_path.segments) points_on (10);
+		// pts_on_path <- geometry(shortest_path.segments) points_on (10); 
+		// -- removing points_on() as it causing divergence between shortest path in GAMA and PostGIS 
+		pts_on_path <- shortest_path.vertices;
 		location <- pts_on_path closest_to (self);
 		// Get a list of points that from the points on path, that are closest to the charging stations
 		// These will be the "representative" locations of charging stations for our path/trip.
@@ -411,18 +414,18 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		plot_chargers_nearby <- chargers_nearby;
 		if (empty(chargers_nearby)) {
 		} else {
-			loop cn from: 0 to: length(chargers_nearby) - 1 {
-			// write(cn);
-				snap_point <- pts_on_path closest_to (chargers_nearby[cn]);
-				add snap_point to: cpts_on_path;
-				//				add chargers_nearby[cn]::snap_point to: chargers_nearby_map;
-			}
+//			loop cn from: 0 to: length(chargers_nearby) - 1 {
+//			// write(cn);
+//				snap_point <- pts_on_path closest_to (chargers_nearby[cn]);
+//				add snap_point to: cpts_on_path;
+//				//				add chargers_nearby[cn]::snap_point to: chargers_nearby_map;
+//			}
 
-			plot_cpts <- cpts_on_path;
+// 			plot_cpts <- cpts_on_path;
 			// Get the distances from the EV origin (self) to each of the chargers
 			using topology(road_network_driving) {
 				loop cn from: 0 to: length(chargers_nearby) - 1 {
-					add with_precision(distance_to(self, cpts_on_path[cn]), 1) to: cs_dists;
+					add with_precision(distance_to(self, chargers_nearby[cn]), 1) to: cs_dists;
 				}
 
 			}
@@ -471,7 +474,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 	// Variables to keep track of the old state
 		list<float> cs_dists_old <- copy(cs_dists);
-		list<point> cpts_on_path_old <- copy(cpts_on_path);
+		// list<point> cpts_on_path_old <- copy(cpts_on_path);
 		list<charging_station> chargers_nearby_old <- copy(chargers_nearby);
 		list<float> cs_dists_new;
 		int cs_near_old <- length(chargers_nearby);
@@ -483,7 +486,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			using topology(road_network_driving) {
 				loop cn from: 0 to: cs_near_old - 1 {
 				// write("Within");
-					float dist_cn <- with_precision(distance_to(self, cpts_on_path_old[cn]), 1);
+					float dist_cn <- with_precision(distance_to(self, chargers_nearby_old[cn]), 1);
 					// write(dist_cn);
 					// If the distance to a charger is increasing, then we are past it and so it should not be 
 					// part of our chargers_nearby list and all associated data-structures need to updated
@@ -492,17 +495,17 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					// write("remove");
 					// write(cs_dists_old[cn]);
 						remove chargers_nearby_old[cn] from: chargers_nearby;
-						remove cpts_on_path_old[cn] from: cpts_on_path;
+						// remove cpts_on_path_old[cn] from: cpts_on_path;
 					}
 
 				}
 
-				plot_cpts <- cpts_on_path;
+				// plot_cpts <- cpts_on_path;
 				// Find the new distances from the self to the charging stations ahead
 				// maybe can be combined with the previous loop
 				if (length(chargers_nearby) > 0) {
 					loop cn from: 0 to: length(chargers_nearby) - 1 {
-						add with_precision(distance_between(topology(road_network_driving), [self, cpts_on_path[cn]]), 1) to: cs_dists_new;
+						add with_precision(distance_between(topology(road_network_driving), [self, chargers_nearby[cn]]), 1) to: cs_dists_new;
 					}
 
 					cs_dists <- copy(cs_dists_new);
