@@ -540,10 +540,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 	// This updates the EV and EVSE attrbutes during charging
 	action charge {
-	// write (name + " charging - " + "using charger - " + nearest_evse);
-		nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60.0 / 60.0); // Energy in kWhr
-		SOC <- SOC + (nearest_evse.max_power * step * 100.0 / capacity / 60.0 / 60.0);
-		remaining_range <- remaining_range + (nearest_evse.max_power * step * 100.0 / 60.0 / 60.0 / fuel_consumption);
+		// write (name + " charging - " + "using charger - " + nearest_evse);
+		if (SOC < 100) {
+			nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60.0 / 60.0); // Energy in kWhr
+			SOC <- SOC + (nearest_evse.max_power * step * 100.0 / capacity / 60.0 / 60.0);
+			remaining_range <- remaining_range + (nearest_evse.max_power * step * 100.0 / 60.0 / 60.0 / fuel_consumption);
+			
+		}
 	}
 
 	////////////////////////////////////////////
@@ -605,8 +608,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						// TODO: maybe add the distance to tarrget condition as well, if it must charge
 						// This can potentially lead to charging when not needed. 
 						if (remaining_range / 0.000621371 < dist_dest ) {
-							if (remaining_range / 0.000621371 < dist_next_charger) {
-								must_charge_now <- true;
+							if (remaining_range / 0.000621371 < dist_next_charger) { 
+								if (SOC < 100) {
+									must_charge_now <- true;
+								}
 							}
 						} else {
 							dont_charge_now <- true;
@@ -634,7 +639,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						to_charge <- true;
 						charging_decision_time <- current_date;
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
-					// Further only think about charging if OSC <= MIN_SOC_CHARGING - 
+					// Further only think about charging if SOC <= MIN_SOC_CHARGING - 
 					// this is the deterministic SOC-based charging choice to avoid high SOC charging
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
@@ -665,7 +670,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				charger_target <- point(pts_on_path closest_to nearest_evse.location);
 			}
 
-			charging_decision_time <- date(1, 1, 1);
+			// charging_decision_time <- date(1, 1, 1);
 			must_charge_now <- false; // reset to origin, as otherwise this causes infinite loop at chargers
 		}
 		// transition to: driving when: nearest_evse = nil;
@@ -857,6 +862,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			charge_start_time <- nil;
 			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use - 1;
 			to_charge <- false;
+			remove nearest_evse from: chargers_nearby; // this should ensure that the same charger is not considered again for charging
 			// nearest_evse.current_power_draw <- nearest_evse.current_power_draw - nearest_evse.max_power;
 		}
 
