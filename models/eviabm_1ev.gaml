@@ -39,7 +39,7 @@ global skills: [SQLSKILL] {
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
 	// start the simulation based on the sim_start_time from the trip generation 
 	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
-	date starting_date <- date("2019-07-01 09:08:31"); //date(sim_start_time[2][0][0]);
+	date starting_date <- date("2019-07-01 07:40:31"); //date(sim_start_time[2][0][0]);
 	float lookup_distance <- 10 / 0.000621371; // convert miles to m - this is the distance from the road that one looks for charging stations
 	float reconsider_charging_time <- 10.0; // Time in minutes to reconsider charging decision
 	// files
@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98858' and destination_zip = '98424' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98577' and destination_zip = '99026' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -76,7 +76,9 @@ global skills: [SQLSKILL] {
 	list<charging_station> all_chargers;
 	list<charging_station> all_chargers_chademo;
 	list<charging_station> all_chargers_combo;
-
+    
+    list<list<list>> params <- nil;
+    
 	// spatial
 	geometry shape <- envelope(roads_shapefile);
 	graph road_network;
@@ -107,7 +109,7 @@ global skills: [SQLSKILL] {
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
 		write ("Initiating new simulation");
 		// Read in the params from the DB
-		list<list<list>> params <- list<list<list>>(select(DBPARAMS, param_query));
+		params <- list<list<list>>(select(DBPARAMS, param_query));
 		// Assign the parameters as read from the DB
 		seed <- float(params[2][0][2]);
 		lookup_distance <- float(params[2][2][2]) / 0.000621371;
@@ -600,7 +602,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					//					write ("In if");
 						list<charging_station> other_evse <- nearest_evses - [nearest_evse];
 						write ("other_evse: " + other_evse);
-						float dist_next_charger <- with_precision(distance_to(self, other_evse[0]), 1);
+						float dist_next_charger <- float(charger_dists[other_evse[0]][1]);// with_precision(distance_to(self, other_evse[0]), 1);
 						write ("dist_next_charger: " + dist_next_charger);
 						float dist_dest <- with_precision(distance_to(self, the_target), 1);
 						write ("dist_dest: " + dist_dest);
@@ -613,6 +615,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 									must_charge_now <- true;
 								}
 
+							} else if (dist_next_charger <= dist) {
+								must_charge_now <- true; // this should prevent missing (near-overlapping) chargers within charging decision time
 							}
 
 						} else {
@@ -648,11 +652,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
 						write ("path-2 - ccdm, first time");
+						write("to_charge: " + to_charge);
 					} else if (SOC <= MIN_SOC_CHARGING and (current_date - charging_decision_time) / 60 >= reconsider_charging_time) {
 					// write((current_date - charging_decision_time) / 60);
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
 						write ("path-3 - ccdm, subsequent time");
+						write("to_charge: " + to_charge);
 					} else if (SOC <= MAX_SOC_CHARGING) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
@@ -1025,7 +1031,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			prob_charging <- odds_charging / (1 + odds_charging);
 
 			// Make a random draw using the probability from a binomial distribution					
-			// write(prob_charging);
+			write("prob_charging: " + prob_charging);
+			seed <- float(params[2][0][2]);
 			return bool(binomial(1, prob_charging));
 		}
 
