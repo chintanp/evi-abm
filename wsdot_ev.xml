@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <Experiment_plan>
-	<Simulation id="2" sourcePath="/home/test/wsdot_ev/evi-abm/models/eviabm.gaml" finalStep="2881" experiment="gui_exp">
+	<Simulation id="2" sourcePath="/home/test/wsdot_ev/evi-abm/models/eviabm.gaml" finalStep="2881" experiment="no_gui_exp">
 	</Simulation>
 </Experiment_plan>

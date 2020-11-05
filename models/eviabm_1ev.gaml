@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98577' and destination_zip = '99026' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98107' and destination_zip = '98253' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -600,9 +600,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				using topology(road_network_driving) {
 					if (length(nearest_evses) = 2) {
 					//					write ("In if");
-						list<charging_station> other_evse <- nearest_evses - [nearest_evse];
-						write ("other_evse: " + other_evse);
-						float dist_next_charger <- float(charger_dists[other_evse[0]][1]);// with_precision(distance_to(self, other_evse[0]), 1);
+						list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
+						write ("other_evse: " + next_nearest_evse);
+						float dist_next_charger <- float(charger_dists[next_nearest_evse[0]][1]);// with_precision(distance_to(self, other_evse[0]), 1);
 						write ("dist_next_charger: " + dist_next_charger);
 						float dist_dest <- with_precision(distance_to(self, the_target), 1);
 						write ("dist_dest: " + dist_dest);
@@ -616,6 +616,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 								}
 
 							} else if (dist_next_charger <= dist) {
+								list<charging_station> other_evses <- charger_dists.keys - nearest_evses;
+								list<float> other_dists <- nil;
+								loop cs over: other_evses {
+									if (float(charger_dists[cs][1]) > dist and float(charger_dists[cs][1]) < remaining_range / 0.000621371) {
+										dont_charge_now <- true;
+									}
+								}
 								must_charge_now <- true; // this should prevent missing (near-overlapping) chargers within charging decision time
 							}
 
@@ -696,13 +703,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		bool goto_wait <- false;
 		if (length(nearest_evses) = 2) {
 		//					write ("In if");
-			list<charging_station> other_evse <- nearest_evses - [nearest_evse];
+			list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
 			// write(other_evse);
-			float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, other_evse[0]]), 1);
+			float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse[0]]), 1);
 			if (remaining_range / 0.000621371 < dist_next_charger) {
 				goto_wait <- true;
 			} else {
-				nearest_evse <- other_evse[0];
+				nearest_evse <- next_nearest_evse[0];
 			}
 
 		} else {
@@ -773,13 +780,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			} else {
 				if (length(nearest_evses) = 2) {
 				//					write ("In if");
-					list<charging_station> other_evse <- nearest_evses - [nearest_evse];
+					list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
 					// write(other_evse);
-					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, other_evse[0]]), 1);
+					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse[0]]), 1);
 					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > remaining_range / 0.000621371) {
 						goto_wait <- true;
 					} else {
-						nearest_evse <- other_evse[0];
+						nearest_evse <- next_nearest_evse[0];
 						relocate_nearby <- true;
 					}
 
