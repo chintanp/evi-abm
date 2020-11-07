@@ -342,10 +342,12 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	date charging_decision_time <- date(1, 1, 1);
 	list<charging_station> nearest_evses <- [];
 	list<point> pts_on_path;
+	list<point> cpts_on_path;
 	float prob_charging <- 0.0;
 	point prev_loc <- location;
 	map<charging_station, list> charger_dists <- [];
 	map<charging_station, list> charger_dists_old <- [];
+	float dist_dest <- 0.0;
 
 	init {
 
@@ -402,6 +404,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			// trip_length_remaining <- trip_length_remaining - dist; 
 			remaining_range <- remaining_range - dist_in_miles;
 			distance_travelled <- distance_travelled + dist_in_miles;
+			dist_dest <- (trip_distance - distance_travelled) / 0.000621371; // this is dist to dest in m
 		}
 
 	}
@@ -418,12 +421,12 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// Get the distances from the EV current location (self) to each of the chargers
 			using topology(road_network_driving) {
 				loop cs over: charger_dists.keys {
-					float dist_cn <- with_precision(distance_to(self, point(charger_dists_old[cs][0])), 1);
+					float dist_cn <- float(charger_dists[cs][1]) - dist; //with_precision(distance_to(self, point(charger_dists_old[cs][0])), 1);
 
 					// If the distance to a charger is increasing, then we are past it and so it should not be 
 					// part of our chargers_nearby list and all associated data-structures need to updated
 					// ************* To test the sensitivity of this ************************************
-					if (dist_cn > float(charger_dists_old[cs][1])) {
+					if (dist_cn < 0) {
 						
 						remove key: cs from: charger_dists_old;
 
@@ -507,7 +510,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 						list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
 						float dist_next_charger <- float(charger_dists[next_nearest_evse[0]][1]);
-						float dist_dest <- with_precision(distance_to(self, the_target), 1);
 
 						if (remaining_range / 0.000621371 < dist_dest ) {
 							if (remaining_range / 0.000621371 < dist_next_charger) { 
@@ -530,7 +532,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 
 					} else {
-						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						// float dist_dest <- with_precision(distance_to(self, the_target), 1);
 
 						if (remaining_range / 0.000621371 < dist_dest) {
 							must_charge_now <- true;

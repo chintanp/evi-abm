@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98107' and destination_zip = '98253' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98103' and destination_zip = '98249' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -322,10 +322,11 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	charging_station nearest_evse <- nil;
 	list<charging_station> chargers_nearby <- [];
 	list<charging_station> compat_chargers;
-	list<point> cpts_on_path;
+	point cpt_on_path;
 	list<float> cs_dists;
 	point charger_target;
 	float remaining_range <- range * SOC / 100; // vehicles do not always start with the full SOC
+	float dist_dest <- 0.0;
 	float starting_SOC <- -1.0;
 	string charge_start_time <- nil;
 	path shortest_path;
@@ -369,7 +370,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// pts_on_path <- geometry(shortest_path.segments) points_on (10); 
 		// -- removing points_on() as it causing divergence between shortest path in GAMA and PostGIS 
 		pts_on_path <- shortest_path.vertices;
-		location <- pts_on_path closest_to (self);
+		// location <- pts_on_path closest_to (self);
 		// Get a list of points that from the points on path, that are closest to the charging stations
 		// These will be the "representative" locations of charging stations for our path/trip.
 		// write(chargers_nearby);
@@ -387,10 +388,11 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// Get the distances from the EV origin (self) to each of the chargers
 			using topology(road_network_driving) {
 				loop cn from: 0 to: length(chargers_nearby) - 1 {
-					add with_precision(distance_to(self, chargers_nearby[cn]), 1) to: cs_dists;
-					add chargers_nearby[cn]::[pts_on_path closest_to chargers_nearby[cn], with_precision(distance_to(self, point(pts_on_path closest_to chargers_nearby[cn])), 1)] to:
+					// add with_precision(distance_to(self, chargers_nearby[cn]), 1) to: cs_dists;
+					cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
+					add chargers_nearby[cn]::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to:
 					charger_dists;
-					add pts_on_path closest_to chargers_nearby[cn] to: cpts_on_path;
+					// add pts_on_path closest_to chargers_nearby[cn] to: cpts_on_path;
 				}
 
 			}
@@ -432,6 +434,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			// trip_length_remaining <- trip_length_remaining - dist; 
 			remaining_range <- remaining_range - dist_in_miles;
 			distance_travelled <- distance_travelled + dist_in_miles;
+			dist_dest <- (trip_distance - distance_travelled) / 0.000621371; // this is dist to dest in m
 			// write("SOC: " + SOC);
 			//			write("dist in m: " + dist);
 			//			write("veh_speed: " + veh_speed);
@@ -465,13 +468,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			using topology(road_network_driving) {
 				loop cs over: charger_dists.keys {
 					// write ("Within");
-					float dist_cn <- with_precision(distance_to(self, point(charger_dists_old[cs][0])), 1);
+					float dist_cn <- float(charger_dists[cs][1]) - dist; //with_precision(distance_to(self, point(charger_dists_old[cs][0])), 1);
 					// write (dist_cn);
-					// write (float(charger_dists_old[cs][1]));
+					// write (dist);
 					// If the distance to a charger is increasing, then we are past it and so it should not be 
 					// part of our chargers_nearby list and all associated data-structures need to updated
 					// ************* To test the sensitivity of this ************************************
-					if (dist_cn > float(charger_dists_old[cs][1])) {
+					if (dist_cn < 0) {
 						// write ("remove");
 						remove key: cs from: charger_dists_old;
 						// remove chargers_nearby_old[cn] from: chargers_nearby;
@@ -604,7 +607,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						write ("other_evse: " + next_nearest_evse);
 						float dist_next_charger <- float(charger_dists[next_nearest_evse[0]][1]);// with_precision(distance_to(self, other_evse[0]), 1);
 						write ("dist_next_charger: " + dist_next_charger);
-						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						// float dist_dest <- with_precision(distance_to(self, the_target), 1);
 						write ("dist_dest: " + dist_dest);
 						write ("remaining_range: " + remaining_range);
 						// TODO: maybe add the distance to tarrget condition as well, if it must charge
@@ -633,7 +636,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					} else {
 					//					write ("In else");
 					//					write (remaining_range / 0.000621371);
-						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						// float dist_dest <- with_precision(distance_to(self, the_target), 1);
 						//					write (dist_dest);
 						if (remaining_range / 0.000621371 < dist_dest) {
 							must_charge_now <- true;
@@ -684,7 +687,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// write("Transitioning to drive to charger");
 		// write(nearest_evse);
 			if (nearest_evse != nil) {
-				charger_target <- point(pts_on_path closest_to nearest_evse.location);
+				charger_target <- point(charger_dists[nearest_evse][0]);
 			}
 
 			// charging_decision_time <- date(1, 1, 1);
@@ -694,42 +697,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		transition to: stranded when: SOC <= SOC_MIN;
 	}
 
-	//////////////////////////////////////////
-	// 3. State 2
-	// Locate_charger - find the closest charger that is not in use and is the correct connector type 
-	////////////////////////////////////////////
-	state locate_charger {
-	// write("Finding a nearby charger");
-		bool goto_wait <- false;
-		if (length(nearest_evses) = 2) {
-		//					write ("In if");
-			list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
-			// write(other_evse);
-			float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse[0]]), 1);
-			if (remaining_range / 0.000621371 < dist_next_charger) {
-				goto_wait <- true;
-			} else {
-				nearest_evse <- next_nearest_evse[0];
-			}
-
-		} else {
-			goto_wait <- true;
-		}
-
-		// It is time to abandon, if we are out of charge
-		transition to: stranded when: SOC <= SOC_MIN;
-		transition to: waiting when: goto_wait = true {
-			add self to: nearest_evse.waiting_evs;
-		}
-
-		transition to: drive_to_charger when: nearest_evse != nil {
-		// do update_chargers_nearby;
-		// write("Transitioning to drive to charger");
-		// write(nearest_evse);
-			charger_target <- point(pts_on_path closest_to nearest_evse.location);
-		}
-
-	}
 	///////////////////////////////////////////
 	// 4. State 3
 	// Drive_To_Charger - the vehicle is driving to a charging station
@@ -782,7 +749,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				//					write ("In if");
 					list<charging_station> next_nearest_evse <- nearest_evses - [nearest_evse];
 					// write(other_evse);
-					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse[0]]), 1);
+					float dist_next_charger <- float(charger_dists[next_nearest_evse[0]][1]); //with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse[0]]), 1);
 					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > remaining_range / 0.000621371) {
 						goto_wait <- true;
 					} else {
@@ -813,7 +780,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		transition to: charging when: ok_to_charge = true;
 		transition to: driving when: drive_on = true;
 		transition to: drive_to_charger when: relocate_nearby = true {
-			charger_target <- point(pts_on_path closest_to nearest_evse.location);
+			charger_target <- point(charger_dists[nearest_evse][0]); //point(pts_on_path closest_to nearest_evse.location);
 		}
 
 	}
