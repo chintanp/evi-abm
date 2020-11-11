@@ -307,7 +307,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	map<charging_station, list> charger_dists <- [];
 	map<charging_station, list> charger_dists_old <- [];
 	float dist_dest <- 0.0;
-
+    road my_path; 
+    float dist_to_road;
+    geometry my_circle;
+    
 	init {
 
 	// The list of compatible chargers based on teh connector code of the EV
@@ -335,13 +338,20 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		if (empty(chargers_nearby)) {
 		} else {
 		// Create a map of charging stations like so: [cs::[point_on_path, dist_to_cs]]
-			using topology(road_network_driving) {
-				loop cn from: 0 to: length(chargers_nearby) - 1 {
-					cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
-					add chargers_nearby[cn]::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to: charger_dists;
+			// using topology(road_network_driving) {
+				loop cs over: chargers_nearby {
+					my_path <- road(shortest_path.edges closest_to cs);
+					dist_to_road <- distance_to(cs, my_path);
+					my_circle <- circle(dist_to_road + 100.0, cs.location);
+					cpt_on_path <- point(one_of(my_circle inter my_path));
+					// cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
+					if(cpt_on_path != nil) {
+						add cs::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to: charger_dists;
+					}
+					
 				}
 
-			}
+			//}
 
 		} }
 

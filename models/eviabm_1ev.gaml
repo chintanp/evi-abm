@@ -104,6 +104,8 @@ global skills: [SQLSKILL] {
 	list<charging_station> plot_chargers_nearby;
 	list<charging_station> plot_compat_chargers;
 	list<point> plot_cpts;
+	geometry my_circle;
+	road my_path;
 
 	init {
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
@@ -338,6 +340,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	point prev_loc <- location;
 	map<charging_station, list> charger_dists <- [];
 	map<charging_station, list> charger_dists_old <- [];
+	float dist_to_road <- 0.0;
+
+	list<road> sp_roads;
 
 	init {
 
@@ -358,8 +363,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// write(self.location);
 		// write(the_target);
 		shortest_path <- path_between(road_network_driving, self, the_target);
-
-		// write(shortest_path);
+        // sp_roads <- road(shortest_path.shape); 
+		write(shortest_path);
+		write(shortest_path.edges);
+		// write(sp_roads);
 		trip_distance <- shortest_path.shape.perimeter * 0.000621371;
 		plot_shortest_path <- shortest_path;
 		// Find the chargers that are within the 'lookup_distance' of the path. 
@@ -369,7 +376,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// Get a list of points on path
 		// pts_on_path <- geometry(shortest_path.segments) points_on (10); 
 		// -- removing points_on() as it causing divergence between shortest path in GAMA and PostGIS 
-		pts_on_path <- shortest_path.vertices;
+		// pts_on_path <- shortest_path.vertices;
 		// location <- pts_on_path closest_to (self);
 		// Get a list of points that from the points on path, that are closest to the charging stations
 		// These will be the "representative" locations of charging stations for our path/trip.
@@ -386,23 +393,33 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		// 			plot_cpts <- cpts_on_path;
 		// Get the distances from the EV origin (self) to each of the chargers
-			using topology(road_network_driving) {
-				loop cn from: 0 to: length(chargers_nearby) - 1 {
+		chargers_nearby <- list(charging_station[58]); // list(chargers_nearby[15]);//one_of(chargers_nearby);
+		plot_chargers_nearby <- chargers_nearby;
+		write(chargers_nearby);
+			//using topology(road_network_driving) {
+				loop cs over: chargers_nearby {
+					write(cs);
 					// add with_precision(distance_to(self, chargers_nearby[cn]), 1) to: cs_dists;
-					cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
-					add chargers_nearby[cn]::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to:
-					charger_dists;
+					my_path <- shortest_path.edges closest_to cs;
+					write(my_path);
+					dist_to_road <- distance_to(cs, my_path);
+					write(dist_to_road);
+					// cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
+					my_circle <- circle(dist_to_road + 100.0, cs.location);
+					cpt_on_path <- point(one_of(my_circle inter my_path));
+					write(cpt_on_path);
+					add cs::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to: charger_dists;
 					// add pts_on_path closest_to chargers_nearby[cn] to: cpts_on_path;
 				}
 
-			}
+			// }
 
 		}
 		//
 //		write (chargers_nearby);
 //		write (chargers_nearby collect each.station_id);
 //		write (cs_dists);
-//		write (charger_dists);
+		write (charger_dists);
 //		//write(min(charger_dists));
 //		//write(max(charger_dists));
 //		write (trip_distance);
@@ -1137,12 +1154,15 @@ experiment gui_exp {
 				//				draw square(5000) color: #yellow at: nearest_evses[0];
 				//				draw square(5000) color: #brown at: nearest_evses[1];
 				loop jj from: 0 to: length(plot_chargers_nearby collect each.location) {
-					draw circle(500) color: #yellow at: plot_chargers_nearby[jj].location;
-					draw square(1000) color: #turquoise at: point(plot_shortest_path.vertices closest_to plot_chargers_nearby[jj].location);
-					draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
+					draw circle(1100) color: #yellow at: plot_chargers_nearby[jj].location;
+					//draw square(1100) color: #turquoise at: point(plot_shortest_path.vertices closest_to plot_chargers_nearby[jj].location);
+					// draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
 				}
 
 				draw geometry(plot_shortest_path.segments) color: #green width: 4;
+				draw geometry(my_path) color: #blue width: 50;
+				// draw circle(1100) color: #yellow at: plot_chargers_nearby[0].location;
+				draw geometry(my_circle)  color: #darkorange empty: true width: 10;
 				// draw string(int(nearest_evse)) at: nearest_evse.location size: 5#m color: #black;
 
 				//                loop rr from: 0 to: length(cpts_on_path) - 1 {
