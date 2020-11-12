@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98103' and destination_zip = '98249' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98845' and destination_zip = '98002' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -105,6 +105,7 @@ global skills: [SQLSKILL] {
 	list<charging_station> plot_compat_chargers;
 	list<point> plot_cpts;
 	geometry my_circle;
+	geometry plot_my_circle;
 	road my_path;
 
 	init {
@@ -393,7 +394,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		// 			plot_cpts <- cpts_on_path;
 		// Get the distances from the EV origin (self) to each of the chargers
-		chargers_nearby <- list(charging_station[58]); // list(chargers_nearby[15]);//one_of(chargers_nearby);
+		// chargers_nearby <- list(charging_station[58]); // list(chargers_nearby[15]);//one_of(chargers_nearby);
 		plot_chargers_nearby <- chargers_nearby;
 		write(chargers_nearby);
 			//using topology(road_network_driving) {
@@ -409,6 +410,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					cpt_on_path <- point(one_of(my_circle inter my_path));
 					write(cpt_on_path);
 					add cs::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to: charger_dists;
+					add cpt_on_path to: plot_cpts;
+					if(cs = charging_station(103)) {
+						plot_my_circle <- copy(my_circle);
+					}
 					// add pts_on_path closest_to chargers_nearby[cn] to: cpts_on_path;
 				}
 
@@ -1155,14 +1160,14 @@ experiment gui_exp {
 				//				draw square(5000) color: #brown at: nearest_evses[1];
 				loop jj from: 0 to: length(plot_chargers_nearby collect each.location) {
 					draw circle(1100) color: #yellow at: plot_chargers_nearby[jj].location;
-					//draw square(1100) color: #turquoise at: point(plot_shortest_path.vertices closest_to plot_chargers_nearby[jj].location);
-					// draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
+					draw square(1100) color: #turquoise at: plot_cpts[jj];
+					draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
 				}
 
 				draw geometry(plot_shortest_path.segments) color: #green width: 4;
 				draw geometry(my_path) color: #blue width: 50;
 				// draw circle(1100) color: #yellow at: plot_chargers_nearby[0].location;
-				draw geometry(my_circle)  color: #darkorange empty: true width: 10;
+				draw geometry(plot_my_circle)  color: #darkorange empty: true width: 10;
 				// draw string(int(nearest_evse)) at: nearest_evse.location size: 5#m color: #black;
 
 				//                loop rr from: 0 to: length(cpts_on_path) - 1 {

@@ -346,7 +346,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					cpt_on_path <- point(one_of(my_circle inter my_path));
 					// cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
 					if(cpt_on_path != nil) {
-						add cs::[cpt_on_path, with_precision(distance_to(self, point(cpt_on_path)), 1)] to: charger_dists;
+						add cs::[cpt_on_path, with_precision(distance_between(topology(road_network_driving), [self, point(cpt_on_path)]), 1)] to: charger_dists;
 					}
 					
 				}
