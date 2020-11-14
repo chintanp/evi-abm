@@ -192,19 +192,19 @@ global skills: [SQLSKILL] {
 	reflex log_EV_agents {
 		if (length(EVs) > 0) {
 			string
-			info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, nearest_evse_id, nearest_evses, charging_decision_time) VALUES';
+			info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, charging_decision_time) VALUES';
 			point l_4326 <- point(CRS_transform(EVs[0].location, "EPSG:4326"));
 			float latitude <- l_4326.y;
 			float longitude <- l_4326.x;
 			string
-			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath + "', '" + EVs[0].csp_nearest.parent_cs + "', '" + EVs[0].csp_next_nearest + "', '" + string(EVs[0].charging_decision_time) + "')";
+			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath +  "', '" + string(EVs[0].charging_decision_time) + "')";
 			if (length(EVs) > 1) {
 				loop jj from: 1 to: length(EVs) - 1 {
 					l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
 					latitude <- l_4326.y;
 					longitude <- l_4326.x;
 					valq_info <-
-					valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_onpath + "', '" + EVs[jj].csp_nearest.parent_cs + "', '" + EVs[jj].csp_next_nearest + "', '" + string(EVs[jj].charging_decision_time) + "')";
+					valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_onpath + "', '" + string(EVs[jj].charging_decision_time) + "')";
 				}
 
 			}
