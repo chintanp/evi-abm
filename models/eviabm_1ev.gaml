@@ -39,7 +39,7 @@ global skills: [SQLSKILL] {
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
 	// start the simulation based on the sim_start_time from the trip generation 
 	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
-	date starting_date <- date("2019-07-01 07:40:31"); //date(sim_start_time[2][0][0]);
+	date starting_date <- date("2019-07-01 09:20:31"); //date(sim_start_time[2][0][0]);
 	float lookup_distance <- 10 / 0.000621371; // convert miles to m - this is the distance from the road that one looks for charging stations
 	float reconsider_charging_time <- 10.0; // Time in minutes to reconsider charging decision
 	// files
@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98628' and destination_zip = '98032' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98926' and destination_zip = '98115' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -106,6 +106,7 @@ global skills: [SQLSKILL] {
 	geometry my_circle;
 	geometry plot_my_circle;
 	road my_path;
+	list<cs_pt_on_path> plot_cs_pts;
 
 	init {
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
@@ -196,7 +197,7 @@ global skills: [SQLSKILL] {
 		//			[shape::to_GAMA_CRS({float(EV_data[18, i]), float(EV_data[17, i])}, "EPSG:4326"), veh_make::string(EV_data[6, i]), veh_model::string(EV_data[7, i]), veh_model_year::int(EV_data[5, i]), veh_ID::string(EV_data[14, i]), range::float(EV_data[8, i]), capacity::float(EV_data[11, i]), fuel_consumption::float(EV_data[12, i]), // Value in kWh / 100 miles
 		//			connector_code::int(EV_data[13, i]), the_target::point(to_GAMA_CRS({float(EV_data[20, i]), float(EV_data[19, i])}, "EPSG:4326")), origin_zip::int(EV_data[15, i]), destination_zip::int(EV_data[16, i]), SOC::float(EV_data[21, i]), trip_start_time::date(string(EV_data[22, i]), '%Y-%M-%D %h:%m:%s'), trip_distance:: float(EV_data[23, i])];
 		//		}
-		loop ii from: 1 to: 1 {
+		loop ii from: 0 to: 0 {
 			create EVs with: [shape::road_network_driving.vertices closest_to
 			to_GAMA_CRS({float(evs[2][ii][3]), float(evs[2][ii][2])}, "EPSG:4326"), veh_ID::string(evs[2][ii][0]), range::float(evs[2][ii][9]), capacity::float(evs[2][ii][10]), fuel_consumption::float(evs[2][ii][11]), connector_code::int(evs[2][ii][12]), the_target::road_network_driving.vertices
 			closest_to
@@ -412,12 +413,12 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				dist_to_road <- distance_to(cs, my_path);
 				write (dist_to_road);
 				// cpt_on_path <- pts_on_path closest_to chargers_nearby[cn];
-				my_circle <- circle(dist_to_road + 100.0, cs.location);
+				my_circle <- circle(dist_to_road + 80, cs.location);
 				cpt_on_path <- point(one_of(my_circle inter my_path));
 				write (cpt_on_path);
 				// add cs::[cpt_on_path, with_precision(distance_between(topology(road_network_driving), [self, point(cpt_on_path)]), 1)] to: charger_dists;
 				add cpt_on_path to: plot_cpts;
-				if (cs = charging_station(103)) {
+				if (cs = charging_station(20)) {
 					plot_my_circle <- copy(my_circle);
 				}
 
@@ -425,7 +426,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				create cs_pt_on_path with: [parent_cs::cs, location::cpt_on_path, dist_to::with_precision(distance_between(topology(road_network_driving), [self, point(cpt_on_path)]), 1)];
 				// add pts_on_path closest_to chargers_nearby[cn] to: cpts_on_path;
 			}
-
+            plot_cs_pts <- cs_pt_on_path as list;
 			// }
 
 		}
@@ -619,6 +620,13 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	//write (min(cs_dists));
 	// if we close to a charging station, or the point on the path that represents the charging station
 	// closeness is checked by the distance a vehicle may move in a minute
+		if (!empty(csp_nearby)) {
+			ask csp_nearby {
+				do die;
+			}
+
+		}
+
 		int temp_ID;
 		bool must_charge_now <- false;
 		bool dont_charge_now <- false;
@@ -641,8 +649,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// do update_chargers_nearby; // This updates the list of chargers that are still relevant, as all those behind in the route will be removed
 		// prev_loc <- location;
 		//		if (nearest_evse != nil) {
+		
 		using topology(road_network_driving) {
 			csp_nearby <- cs_pt_on_path at_distance (2 * dist);
+			
 			if (!empty(csp_nearby)) {
 				csp_others <- cs_pt_on_path - csp_nearby;
 				seed <- float(params[2][0][2]);
@@ -654,7 +664,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 						if (remaining_range / 0.000621371 <= dist_next_charger) {
 							must_charge_now <- true;
 						} else {
-						// dont_charge_now <- true;
+						    // dont_charge_now <- true;
 						}
 
 					} else {
@@ -1226,6 +1236,11 @@ experiment gui_exp {
 					draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
 				}
 
+                loop kk over: plot_cs_pts {
+                	draw circle(1100) color: #brown at: kk.location;
+                	draw replace(kk.name, 'cs_pt_on_path', '') at: kk.location size: 1 #m color: #blue;
+                }
+                
 				draw geometry(plot_shortest_path.segments) color: #green width: 4;
 				draw geometry(my_path) color: #blue width: 50;
 				// draw circle(1100) color: #yellow at: plot_chargers_nearby[0].location;

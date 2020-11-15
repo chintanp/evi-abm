@@ -197,7 +197,7 @@ global skills: [SQLSKILL] {
 			float latitude <- l_4326.y;
 			float longitude <- l_4326.x;
 			string
-			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath +  "', '" + string(EVs[0].charging_decision_time) + "')";
+			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath + "', '" + string(EVs[0].charging_decision_time) + "')";
 			if (length(EVs) > 1) {
 				loop jj from: 1 to: length(EVs) - 1 {
 					l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
@@ -392,9 +392,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	// Resting - to denote the time spent at home before starting the trip 
 	////////////////////////////////////////////
 	state resting initial: true {
-	// write(name + " IN resting state");
-	// write(current_date);
-	// write(trip_start_time);
 		transition to: driving when: current_date >= trip_start_time;
 	}
 
@@ -449,24 +446,17 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					if (must_charge_now = true) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
-						write ("path-1 - must_charge, wont make it to dest");
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
 					// Further only think about charging if SOC <= MIN_SOC_CHARGING - 
 					// this is the deterministic SOC-based charging choice to avoid high SOC charging
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
-						write ("path-2 - ccdm, first time");
-						write ("to_charge: " + to_charge);
 					} else if (SOC <= MIN_SOC_CHARGING and (current_date - charging_decision_time) / 60 >= reconsider_charging_time) {
-					// write((current_date - charging_decision_time) / 60);
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
-						write ("path-3 - ccdm, subsequent time");
-						write ("to_charge: " + to_charge);
 					} else if (SOC <= MAX_SOC_CHARGING) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
-						write ("path-4 - must charge, SOC too low");
 					} } } }
 
 					// It is time to rest, if we have reached our destination
@@ -693,7 +683,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		// Talk to the nearest EVSE to find out VSE specific parameters
 			ask csp_nearest.parent_cs {
-			// write ("charger ID: " + self.station_id);
 				charging_time <- (80 - myself.SOC) * myself.capacity / 100 / self.max_power; // energy used / power = time
 				if (self.dcfc_var_parking_price_unit = "min") {
 					parking_price <- self.dcfc_fixed_parking_price + charging_time * 60 * self.dcfc_var_parking_price;
