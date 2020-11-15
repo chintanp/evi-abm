@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =" + analysis_id + " and origin_zip = '98926' and destination_zip = '98115' order by e.veh_id::int";
+	where e.analysis_id =" + analysis_id + " and origin_zip = '98662' and destination_zip = '98372' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -1212,6 +1212,10 @@ experiment gui_exp {
 	parameter var: db_user name: "db_user" category: "My parameters";
 	parameter var: db_pwd name: "db_pwd" category: "My parameters";
 	// Define attributes, actions, a init section and behaviors if necessary
+	
+	 reflex getseed {
+        ask simulations {write seed;}
+    } 
 	// init { }
 	output {
 		display WA_network type: opengl {
