@@ -386,14 +386,15 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		int cs_near_old <- length(chargers_onpath_old);
 		if (cs_near_old > 0) {
 		// Get the distances from the EV current location (self) to each of the chargers
+		using topology(road_network_driving) {
 			loop cn from: 0 to: cs_near_old - 1 {
 			// write("Within");
-				float dist_cn <- cs_dists_old[cn] - dist;
+				float dist_cn <- with_precision(distance_to(self, cpts_on_path_old[cn]), 1);
 				// write(dist_cn);
 				// If the distance to a charger is increasing, then we are past it and so it should not be 
 				// part of our chargers_nearby list and all associated data-structures need to updated
 				// ************* To test the sensitivity of this ************************************
-				if (dist_cn < 0) {
+				if (dist_cn > cs_dists_old[cn]) {
 				// write("remove");
 				// write(cs_dists_old[cn]);
 					remove chargers_onpath_old[cn] from: chargers_onpath;
@@ -411,6 +412,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				cs_dists <- copy(cs_dists_new);
 			}
 
+		}
+		
 		}
 
 		do search_charger;
