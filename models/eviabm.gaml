@@ -420,11 +420,11 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		if (length(chargers_onpath) = 0) {
 			nearest_evse <- nil;
 		} else {
-			using topology(road_network_driving) {
+			// using topology(road_network_driving) {
 			// Find the charger closest to the current location
 				nearest_evse <- chargers_onpath closest_to location;
 				nearest_evses <- chargers_onpath closest_to (location, 2);
-			}
+			// }
 			// write (nearest_evses);
 		}
 
