@@ -19,7 +19,8 @@ global skills: [SQLSKILL] {
 	file aidfile <- csv_file("../analysis_id", false);
 	matrix aidm <- matrix(aidfile);
 	int analysis_id <- int(aidm[0, 0]);
-
+    float seed <- float(aidm[0,1]);
+    
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
 	matrix dbcredsm <- matrix(envfile);
@@ -87,6 +88,7 @@ global skills: [SQLSKILL] {
 	int connector_code;
 	float BLOCK_SIZE <- 200.0; // Size of block in meters, where relocation preferred over waiting
 	init {
+		write(seed);
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
 		write ("Initiating new simulation");
 		// Read in the params from the DB
