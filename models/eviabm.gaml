@@ -19,8 +19,8 @@ global skills: [SQLSKILL] {
 	file aidfile <- csv_file("../analysis_id", false);
 	matrix aidm <- matrix(aidfile);
 	int analysis_id <- int(aidm[0, 0]);
-    float seed <- float(aidm[0,1]);
-    
+	float seed <- float(aidm[0, 1]);
+
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
 	matrix dbcredsm <- matrix(envfile);
@@ -88,13 +88,13 @@ global skills: [SQLSKILL] {
 	int connector_code;
 	float BLOCK_SIZE <- 200.0; // Size of block in meters, where relocation preferred over waiting
 	init {
-		write(seed);
+		write (seed);
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
 		write ("Initiating new simulation");
 		// Read in the params from the DB
 		params <- list<list<list>>(select(DBPARAMS, param_query));
 		// Assign the parameters as read from the DB
-		seed <- float(params[2][0][2]);
+		// seed <- float(params[2][0][2]);
 		lookup_distance <- float(params[2][2][2]) / 0.000621371;
 		step <- float(params[2][3][2]) #mn;
 		reconsider_charging_time <- float(params[2][4][2]);
@@ -388,34 +388,34 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		int cs_near_old <- length(chargers_onpath_old);
 		if (cs_near_old > 0) {
 		// Get the distances from the EV current location (self) to each of the chargers
-		using topology(road_network_driving) {
-			loop cn from: 0 to: cs_near_old - 1 {
-			// write("Within");
-				float dist_cn <- with_precision(distance_to(self, cpts_on_path_old[cn]), 1);
-				// write(dist_cn);
-				// If the distance to a charger is increasing, then we are past it and so it should not be 
-				// part of our chargers_nearby list and all associated data-structures need to updated
-				// ************* To test the sensitivity of this ************************************
-				if (dist_cn > cs_dists_old[cn]) {
-				// write("remove");
-				// write(cs_dists_old[cn]);
-					remove chargers_onpath_old[cn] from: chargers_onpath;
-					remove cpts_on_path_old[cn] from: cpts_on_path;
+			using topology(road_network_driving) {
+				loop cn from: 0 to: cs_near_old - 1 {
+				// write("Within");
+					float dist_cn <- with_precision(distance_to(self, cpts_on_path_old[cn]), 1);
+					// write(dist_cn);
+					// If the distance to a charger is increasing, then we are past it and so it should not be 
+					// part of our chargers_nearby list and all associated data-structures need to updated
+					// ************* To test the sensitivity of this ************************************
+					if (dist_cn > cs_dists_old[cn]) {
+					// write("remove");
+					// write(cs_dists_old[cn]);
+						remove chargers_onpath_old[cn] from: chargers_onpath;
+						remove cpts_on_path_old[cn] from: cpts_on_path;
+					}
+
+				}
+				// Find the new distances from the self to the charging stations ahead
+				// maybe can be combined with the previous loop
+				if (length(chargers_onpath) > 0) {
+					loop cn from: 0 to: length(chargers_onpath) - 1 {
+						add with_precision(distance_between(topology(road_network_driving), [self, cpts_on_path[cn]]), 1) to: cs_dists_new;
+					}
+
+					cs_dists <- copy(cs_dists_new);
 				}
 
 			}
-			// Find the new distances from the self to the charging stations ahead
-			// maybe can be combined with the previous loop
-			if (length(chargers_onpath) > 0) {
-				loop cn from: 0 to: length(chargers_onpath) - 1 {
-					add with_precision(distance_between(topology(road_network_driving), [self, cpts_on_path[cn]]), 1) to: cs_dists_new;
-				}
 
-				cs_dists <- copy(cs_dists_new);
-			}
-
-		}
-		
 		}
 
 		do search_charger;
@@ -425,10 +425,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		if (length(chargers_onpath) = 0) {
 			nearest_evse <- nil;
 		} else {
-			// using topology(road_network_driving) {
-			// Find the charger closest to the current location
-				nearest_evse <- chargers_onpath closest_to location;
-				nearest_evses <- chargers_onpath closest_to (location, 2);
+		// using topology(road_network_driving) {
+		// Find the charger closest to the current location
+			nearest_evse <- chargers_onpath closest_to location;
+			nearest_evses <- chargers_onpath closest_to (location, 2);
 			// }
 			// write (nearest_evses);
 		}
@@ -501,7 +501,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 				if (dont_charge_now = false) {
 				// always charge if you cant make it to the destination or the next station
-					if (must_charge_now = true) {
+					if (SOC <= MIN_SOC_CHARGING and must_charge_now = true) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
@@ -523,7 +523,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// It is time to charge if charge 'makes sense'
 		transition to: drive_to_charger when: (to_charge = true and nearest_evse != nil) {
 			charger_target <- point(pts_on_path closest_to nearest_evse.location);
-			must_charge_now <- false; // reset to origin, as otherwise this causes infinite loop at chargers
+			charging_decision_time <- date(1, 1, 1); // reset to origin, as otherwise this causes infinite loop at chargers
 		}
 
 		transition to: stranded when: SOC <= SOC_MIN;
@@ -560,11 +560,28 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		bool ok_to_charge <- false;
 		bool drive_on <- false;
 		bool goto_wait <- false;
+		bool relocate_nearby <- false;
+		
 		if (nearest_evse.plugs_in_use = nearest_evse.dcfc_plug_count) { // if the charging station is occupied
 			if (dist_dest < remaining_range / 0.000621371) {
 				drive_on <- true; // keep on driving if you can make it to the destination
 			} else {
-				goto_wait <- true;
+				if (length(nearest_evses) = 2) {
+				//					write ("In if");
+					list<charging_station> other_evse <- nearest_evses - [nearest_evse];
+					// write(other_evse);
+					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, other_evse[0]]), 1);
+					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > remaining_range / 0.000621371) {
+						goto_wait <- true;
+					} else {
+						nearest_evse <- other_evse[0];
+						relocate_nearby <- true;
+					}
+
+				} else {
+					goto_wait <- true;
+				}
+
 			}
 
 		} else if (nearest_evse.plugs_in_use < nearest_evse.dcfc_plug_count) {
@@ -637,7 +654,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			charge_start_time <- nil;
 			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use - 1;
 			to_charge <- false;
-			remove nearest_evse from: chargers_onpath;
+			// remove nearest_evse from: chargers_onpath;
 		}
 
 		transition to: waiting when: ok_to_charge = false {
@@ -735,8 +752,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		int amenity_restroom <- 1; // al charging stations have restrooms, ** this assumption needs validation **
 		int amenity_more;
 		if (nearest_evse != nil) {
-
-		// Talk to the nearest EVSE to find out VSE specific parameters
+			do search_charger;
+			// Talk to the nearest EVSE to find out VSE specific parameters
 			ask nearest_evse {
 				charging_time <- (80 - myself.SOC) * myself.capacity / 100 / self.max_power; // energy used / power = time
 				if (self.dcfc_var_parking_price_unit = "min") {
@@ -765,7 +782,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			float odds_charging <- exp(u_charging);
 			prob_charging <- odds_charging / (1 + odds_charging);
 			// set the seed every time to ensure repeatability
-			seed <- float(params[2][0][2]);
+			// seed <- float(params[2][0][2]);
 			// Make a random draw using the probability from a binomial distribution					
 			return bool(binomial(1, prob_charging));
 		}
