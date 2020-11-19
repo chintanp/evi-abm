@@ -51,7 +51,7 @@ global skills: [SQLSKILL] {
 	string
 	bevse_query <- 'SELECT dcfc_count, ev_network, longitude, latitude, ev_connector_types, bevse_id, connector_code, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price, zip FROM built_evse where dcfc_count >= 1;';
 	string
-	nevse_query <- 'SELECT nevse_id, longitude, latitude, connector_code, dcfc_plug_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from new_evses where dcfc_plug_count > 0 and analysis_id = ' + analysis_id ;
+	nevse_query <- 'SELECT nevse_id, longitude, latitude, connector_code, dcfc_plug_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from new_evses where dcfc_plug_count > 0 and analysis_id = ' + analysis_id;
 	string evtrip_query <- 'select e.veh_id, e.origin_zip, z1.latitude as olat, z1.longitude as olng, e.destination_zip, 
 		z2.latitude as dlat, z2.longitude as dlng, e.soc, e.trip_start_time, b.range_fe, 
 		b.capacity, b.fuel_consumption, b.connector_code
@@ -437,10 +437,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 	// This updates the EV and EVSE attrbutes during charging
 	action charge {
-		// if (SOC < 100) {
-			nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60.0 / 60.0); // Energy in kWhr
-			SOC <- SOC + (nearest_evse.max_power * step * 100.0 / capacity / 60.0 / 60.0);
-			remaining_range <- remaining_range + (nearest_evse.max_power * step * 100.0 / 60.0 / 60.0 / fuel_consumption);
+	// if (SOC < 100) {
+		nearest_evse.energy_consumed <- nearest_evse.energy_consumed + (nearest_evse.max_power * step / 60.0 / 60.0); // Energy in kWhr
+		SOC <- SOC + (nearest_evse.max_power * step * 100.0 / capacity / 60.0 / 60.0);
+		remaining_range <- remaining_range + (nearest_evse.max_power * step * 100.0 / 60.0 / 60.0 / fuel_consumption);
 		// }
 
 	}
@@ -482,13 +482,18 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 					//					write ("In if");code 
 						list<charging_station> other_evse <- nearest_evses - [nearest_evse];
 						float dist_next_charger <- with_precision(distance_to(self, other_evse[0]), 1);
-						if (remaining_range / 0.000621371 < dist_next_charger) {
-							must_charge_now <- true;
+						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						if (remaining_range / 0.000621371 < dist_dest) {
+							if (remaining_range / 0.000621371 < dist_next_charger) {
+								must_charge_now <- true;
+							}
+
+						} else {
+							dont_charge_now <- true;
 						}
 
 					} else {
-
-					float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						float dist_dest <- with_precision(distance_to(self, the_target), 1);
 						if (remaining_range / 0.000621371 < dist_dest) {
 							must_charge_now <- true;
 						} else {
@@ -501,7 +506,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 				if (dont_charge_now = false) {
 				// always charge if you cant make it to the destination or the next station
-					if (SOC <= MIN_SOC_CHARGING and must_charge_now = true) {
+					if (must_charge_now = true) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
@@ -523,7 +528,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// It is time to charge if charge 'makes sense'
 		transition to: drive_to_charger when: (to_charge = true and nearest_evse != nil) {
 			charger_target <- point(pts_on_path closest_to nearest_evse.location);
-			charging_decision_time <- date(1, 1, 1); // reset to origin, as otherwise this causes infinite loop at chargers
+			charging_decision_time <- date(1, 1, 1); 
+			must_charge_now <- false; // reset to origin, as otherwise this causes infinite loop at chargers
 		}
 
 		transition to: stranded when: SOC <= SOC_MIN;
@@ -561,7 +567,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		bool drive_on <- false;
 		bool goto_wait <- false;
 		bool relocate_nearby <- false;
-		
 		if (nearest_evse.plugs_in_use = nearest_evse.dcfc_plug_count) { // if the charging station is occupied
 			if (distance_between(topology(road_network_driving), [self, the_target]) < remaining_range / 0.000621371) {
 				drive_on <- true; // keep on driving if you can make it to the destination
@@ -599,6 +604,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		transition to: charging when: ok_to_charge = true;
 		transition to: driving when: drive_on = true;
+		transition to: drive_to_charger when: relocate_nearby = true {
+			charger_target <- point(pts_on_path closest_to nearest_evse.location);
+		}
 	}
 
 	///////////////////////////////////////////
@@ -751,8 +759,12 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		path path_to_cs;
 		int amenity_restroom <- 1; // al charging stations have restrooms, ** this assumption needs validation **
 		int amenity_more;
+		
+		do search_charger;
+		
+		
 		if (nearest_evse != nil) {
-			do search_charger;
+			
 			// Talk to the nearest EVSE to find out VSE specific parameters
 			ask nearest_evse {
 				charging_time <- (80 - myself.SOC) * myself.capacity / 100 / self.max_power; // energy used / power = time
