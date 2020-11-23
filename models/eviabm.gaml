@@ -472,6 +472,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		int temp_ID;
 		bool must_charge_now <- false;
 		bool dont_charge_now <- false;
+		to_charge <- false;
 		// Find the current road on which the vehicle is traveling
 		currentRoad <- (roadsList select (each != currentRoad)) with_min_of (each distance_to self);
 		// Find the speed of traffic on this road
@@ -483,7 +484,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		do update_states; // This is where SOC gets updated
 		do update_chargers_nearby; // This updates the list of chargers that are still relevant, as all those behind in the route will be removed
 		if (nearest_evse != nil) {
-			if (min(cs_dists) <= 2 * dist) {
+			if (min(cs_dists) <= dist) {
 				using topology(road_network_driving) {
 					if (next_nearest_evse != nil) {
 					//					write ("In if");code 
@@ -513,7 +514,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 				if (dont_charge_now = false) {
 				// always charge if you cant make it to the destination or the next station
-					if (must_charge_now = true) {
+					if (must_charge_now = true and SOC < SOC_MAX) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
@@ -583,7 +584,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 				// list<charging_station> other_evse <- nearest_evses - [nearest_evse];
 				// write(other_evse);
 					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse]), 1);
-					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > remaining_range / 0.000621371) {
+					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > 0.95 * remaining_range / 0.000621371) {
 						goto_wait <- true;
 					} else {
 						nearest_evse <- next_nearest_evse;
@@ -658,22 +659,22 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		// If charged enough, go to driving
 		transition to: driving when: SOC >= SOC_MAX {
-			string charge_end_time <- string(current_date);
-			float ending_SOC <- SOC;
-			string evse_id <- nearest_evse.station_id;
 			if (charge_start_time != nil) {
+				string charge_end_time <- string(current_date);
+				float ending_SOC <- SOC;
+				string evse_id <- nearest_evse.station_id;
 				string cs_query <- 'INSERT INTO evse_charging_session (charge_start_time, charge_end_time, veh_id, starting_soc, ending_soc, evse_id, analysis_id) VALUES';
 				string
 				valq_cs <- "('" + charge_start_time + "', '" + charge_end_time + "', '" + veh_ID + "', " + starting_SOC + ", " + ending_SOC + ", '" + evse_id + "', " + analysis_id + ")";
 				cs_query <- cs_query + valq_cs;
 				do executeUpdate params: DBPARAMS updateComm: cs_query;
+				starting_SOC <- -1.0;
+				charge_start_time <- nil;
+				nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use - 1;
+				to_charge <- false;
 			}
 
-			starting_SOC <- -1.0;
-			charge_start_time <- nil;
-			nearest_evse.plugs_in_use <- nearest_evse.plugs_in_use - 1;
-			to_charge <- false;
-			remove nearest_evse from: chargers_onpath;
+			// remove nearest_evse from: chargers_onpath;
 		}
 
 		transition to: waiting when: ok_to_charge = false {
@@ -851,7 +852,6 @@ species charging_station {
 }
 
 experiment no_gui_exp {
-	
 	output {
 	}
 

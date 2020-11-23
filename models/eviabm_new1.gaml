@@ -19,7 +19,7 @@ global skills: [SQLSKILL] {
 	file aidfile <- csv_file("../analysis_id", false);
 	matrix aidm <- matrix(aidfile);
 	int analysis_id <- int(aidm[0, 0]);
-	
+	float seed <- float(aidm[0, 1]) parameter: true;
 
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =' + analysis_id + " and origin_zip = '98177' and destination_zip = '98671' order by e.veh_id::int";
+	where e.analysis_id =' + analysis_id + " and origin_zip = '98110' and destination_zip = '98102' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -447,7 +447,7 @@ plot_compat_chargers <- compat_chargers;
 		if (length(chargers_onpath) = 0) {
 			nearest_evse <- nil;
 		} else {
-		// using topology(road_network_driving) {
+	//	using topology(road_network_driving) {
 		// Find the charger closest to the current location
 			nearest_evse <- chargers_onpath closest_to location;
 			// nearest_evses <- chargers_onpath closest_to (location, 2);
@@ -456,7 +456,7 @@ plot_compat_chargers <- compat_chargers;
 			}
 			
 			next_nearest_evse <- (chargers_onpath - chargers_nearby - nearest_evse) closest_to location;
-			// }
+	//	}
 			// write (nearest_evses);
 		}
 
@@ -492,6 +492,7 @@ plot_compat_chargers <- compat_chargers;
 		int temp_ID;
 		bool must_charge_now <- false;
 		bool dont_charge_now <- false;
+		to_charge <- false;
 		// Find the current road on which the vehicle is traveling
 		currentRoad <- (roadsList select (each != currentRoad)) with_min_of (each distance_to self);
 		// Find the speed of traffic on this road
@@ -503,7 +504,7 @@ plot_compat_chargers <- compat_chargers;
 		do update_states; // This is where SOC gets updated
 		do update_chargers_nearby; // This updates the list of chargers that are still relevant, as all those behind in the route will be removed
 		if (nearest_evse != nil) {
-			if (min(cs_dists) <= 2 * dist) {
+			if (min(cs_dists) <= dist) {
 				using topology(road_network_driving) {
 					if (next_nearest_evse != nil) {
 					//					write ("In if");code 
@@ -881,7 +882,7 @@ experiment gui_exp {
 // Define parameters here if necessary
 // parameter "My parameter" category: "My parameters" var: one_global_attribute;
 	// float seed <- 123.0;
-	float seed <- float(aidm[0, 1]) parameter: true;
+	
 	parameter var: analysis_id name: "analysis_id" category: "My parameters";
 	// parameter var: seed name: "seed" category: "My parameters";
 	parameter var: db_host name: "db_host" category: "My parameters";
