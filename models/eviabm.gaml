@@ -19,6 +19,7 @@ global skills: [SQLSKILL] {
 	file aidfile <- csv_file("../analysis_id", false);
 	matrix aidm <- matrix(aidfile);
 	int analysis_id <- int(aidm[0, 0]);
+	float seed <- float(aidm[0, 1]);
 
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
@@ -850,7 +851,7 @@ species charging_station {
 }
 
 experiment no_gui_exp {
-	float seed <- float(aidm[0, 1]);
+	
 	output {
 	}
 
