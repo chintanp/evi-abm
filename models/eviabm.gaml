@@ -308,6 +308,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	road my_path;
 	float dist_to_road;
 	geometry my_circle;
+	point next_point <- nil;
 	//	cs_pt_on_path csp_nearest <- nil;
 	//	cs_pt_on_path csp_next_nearest <- nil;
 	//	list<cs_pt_on_path> csp_others <- nil;
@@ -317,6 +318,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	// list<charging_station> nearest_evses <- [];
 	charging_station nearest_evse <- nil;
 	point snap_point;
+	path path_travelled <- nil;
 	list<charging_station> chargers_nearby <- [];
 
 	init {
@@ -375,6 +377,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			// trip_length_remaining <- trip_length_remaining - dist; 
 			remaining_range <- remaining_range - dist_in_miles;
 			distance_travelled <- distance_travelled + dist_in_miles;
+			float ratio <- (distance_travelled + dist * 0.000621371) / trip_distance;
+			// write (ratio);
+			next_point <- point(points_along(shortest_path.shape, [ratio]));
+			path_travelled <- path_between(topology(road_network_driving), location, next_point);
 			// dist_dest <- (trip_distance - distance_travelled) / 0.000621371; // this is dist to dest in m
 		}
 
@@ -430,10 +436,10 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// using topology(road_network_driving) {
 		// Find the charger closest to the current location
 			nearest_evse <- chargers_onpath closest_to location;
-			ask nearest_evse {
-				myself.chargers_nearby <- myself.chargers_onpath at_distance (2 * myself.dist);
-			}
-
+			//			ask nearest_evse {
+			//				myself.chargers_nearby <- myself.chargers_onpath at_distance (2 * myself.dist);
+			//			}
+			chargers_nearby <- (chargers_onpath overlapping (path_travelled.shape + lookup_distance));
 			next_nearest_evse <- (chargers_onpath - chargers_nearby - nearest_evse) closest_to location;
 			// nearest_evses <- chargers_onpath closest_to (location, 2);
 			// }

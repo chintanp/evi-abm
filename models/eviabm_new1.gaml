@@ -19,7 +19,6 @@ global skills: [SQLSKILL] {
 	file aidfile <- csv_file("../analysis_id", false);
 	matrix aidm <- matrix(aidfile);
 	int analysis_id <- int(aidm[0, 0]);
-	float seed <- float(aidm[0, 1]) parameter: true;
 
 	// Database credentials
 	file envfile <- csv_file("../.env", true);
@@ -40,7 +39,7 @@ global skills: [SQLSKILL] {
 	float step <- 1 #mn; // Time step of 1 minute for the simulation
 	// start the simulation based on the sim_start_time from the trip generation 
 	list<list<list>> sim_start_time <- select(DBPARAMS, 'select sim_start_time from analysis_record where analysis_id = ' + analysis_id);
-	date starting_date <- date(sim_start_time[2][0][0]);
+	date starting_date <- date("2019-07-01 13:30:31"); //date(sim_start_time[2][0][0]);
 	float lookup_distance <- 10 / 0.000621371; // convert miles to m - this is the distance from the road that one looks for charging stations
 	float reconsider_charging_time <- 10.0; // Time in minutes to reconsider charging decision
 	// files
@@ -59,7 +58,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =' + analysis_id + " and origin_zip = '98110' and destination_zip = '98102' order by e.veh_id::int";
+	where e.analysis_id =' + analysis_id + " and origin_zip = '99223' and destination_zip = '99118' order by e.veh_id::int";
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -73,7 +72,8 @@ global skills: [SQLSKILL] {
 	list<charging_station> all_chargers_chademo;
 	list<charging_station> all_chargers_combo;
 	list<list<list>> params <- nil;
-path plot_shortest_path;
+	path plot_shortest_path;
+	path path_travelled;
 
 	// spatial
 	geometry shape <- envelope(roads_shapefile);
@@ -88,16 +88,14 @@ path plot_shortest_path;
 	int MAX_SOC_CHARGING <- 20; // maximum SOC to consider charging - below this SOC, the user must charge
 	int connector_code;
 	float BLOCK_SIZE <- 200.0; // Size of block in meters, where relocation preferred over waiting
-	
-		list<charging_station> plot_chargers_nearby;
+	list<charging_station> plot_chargers_nearby;
 	list<charging_station> plot_compat_chargers;
 	list<point> plot_cpts;
 	geometry my_circle;
 	geometry plot_my_circle;
 	road my_path;
-	
-	
-	
+	point next_point;
+
 	init {
 		write (seed);
 		save string(date("now")) type: csv header: false to: start_time_file rewrite: false;
@@ -177,11 +175,10 @@ path plot_shortest_path;
 
 		// Create EV agents   
 		list<list<list>> evs <- list<list<list>>(select(DBPARAMS, evtrip_query));
-//		loop ii from: 0 to: length(evs[2]) - 1 {
-//			create EVs with:
-//			[shape::to_GAMA_CRS({float(evs[2][ii][3]), float(evs[2][ii][2])}, "EPSG:4326"), veh_ID::string(evs[2][ii][0]), range::float(evs[2][ii][9]), capacity::float(evs[2][ii][10]), fuel_consumption::float(evs[2][ii][11]), connector_code::int(evs[2][ii][12]), the_target::point(to_GAMA_CRS({float(evs[2][ii][6]), float(evs[2][ii][5])}, "EPSG:4326")), origin_zip::int(evs[2][ii][1]), destination_zip::int(evs[2][ii][4]), SOC::float(evs[2][ii][7]), trip_start_time::date(string(evs[2][ii][8]), '%Y-%M-%D %h:%m:%s')];
-//		}
-
+		//		loop ii from: 0 to: length(evs[2]) - 1 {
+		//			create EVs with:
+		//			[shape::to_GAMA_CRS({float(evs[2][ii][3]), float(evs[2][ii][2])}, "EPSG:4326"), veh_ID::string(evs[2][ii][0]), range::float(evs[2][ii][9]), capacity::float(evs[2][ii][10]), fuel_consumption::float(evs[2][ii][11]), connector_code::int(evs[2][ii][12]), the_target::point(to_GAMA_CRS({float(evs[2][ii][6]), float(evs[2][ii][5])}, "EPSG:4326")), origin_zip::int(evs[2][ii][1]), destination_zip::int(evs[2][ii][4]), SOC::float(evs[2][ii][7]), trip_start_time::date(string(evs[2][ii][8]), '%Y-%M-%D %h:%m:%s')];
+		//		}
 		loop ii from: 0 to: 0 {
 			create EVs with: [shape::road_network_driving.vertices closest_to
 			to_GAMA_CRS({float(evs[2][ii][3]), float(evs[2][ii][2])}, "EPSG:4326"), veh_ID::string(evs[2][ii][0]), range::float(evs[2][ii][9]), capacity::float(evs[2][ii][10]), fuel_consumption::float(evs[2][ii][11]), connector_code::int(evs[2][ii][12]), the_target::road_network_driving.vertices
@@ -196,42 +193,42 @@ path plot_shortest_path;
 
 	}
 
-//	reflex log_power_use {
-//		string pd_query <- 'INSERT INTO evse_power_draw (simulation_ts, evse_id, analysis_id, power_val) VALUES';
-//		string valq <- "('" + string(current_date) + "', '" + all_chargers[0].station_id + "', " + analysis_id + ", " + all_chargers[0].current_power_draw + ")";
-//		loop ii from: 1 to: length(all_chargers) - 1 {
-//			valq <- valq + " , " + "('" + string(current_date) + "', '" + all_chargers[ii].station_id + "', " + analysis_id + ", " + all_chargers[ii].current_power_draw + ")";
-//		}
-//
-//		pd_query <- pd_query + valq;
-//		do executeUpdate params: DBPARAMS updateComm: pd_query;
-//	}
-//
-//	reflex log_EV_agents {
-//		if (length(EVs) > 0) {
-//			string
-//			info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, nearest_evse_id, nearest_evses, charging_decision_time) VALUES';
-//			point l_4326 <- point(CRS_transform(EVs[0].location, "EPSG:4326"));
-//			float latitude <- l_4326.y;
-//			float longitude <- l_4326.x;
-//			string
-//			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath + "', '" + EVs[0].nearest_evse + "', '" + EVs[0].nearest_evses + "', '" + string(EVs[0].charging_decision_time) + "')";
-//			if (length(EVs) > 1) {
-//				loop jj from: 1 to: length(EVs) - 1 {
-//					l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
-//					latitude <- l_4326.y;
-//					longitude <- l_4326.x;
-//					valq_info <-
-//					valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_onpath + "', '" + EVs[jj].nearest_evse + "', '" + EVs[jj].nearest_evses + "', '" + string(EVs[jj].charging_decision_time) + "')";
-//				}
-//
-//			}
-//
-//			info_query <- info_query + valq_info;
-//			do executeUpdate params: DBPARAMS updateComm: info_query;
-//		}
-//
-//	}
+	//	reflex log_power_use {
+	//		string pd_query <- 'INSERT INTO evse_power_draw (simulation_ts, evse_id, analysis_id, power_val) VALUES';
+	//		string valq <- "('" + string(current_date) + "', '" + all_chargers[0].station_id + "', " + analysis_id + ", " + all_chargers[0].current_power_draw + ")";
+	//		loop ii from: 1 to: length(all_chargers) - 1 {
+	//			valq <- valq + " , " + "('" + string(current_date) + "', '" + all_chargers[ii].station_id + "', " + analysis_id + ", " + all_chargers[ii].current_power_draw + ")";
+	//		}
+	//
+	//		pd_query <- pd_query + valq;
+	//		do executeUpdate params: DBPARAMS updateComm: pd_query;
+	//	}
+	//
+	//	reflex log_EV_agents {
+	//		if (length(EVs) > 0) {
+	//			string
+	//			info_query <- 'INSERT INTO ev_info (simulation_ts, analysis_id, veh_id, lat_val, lng_val, soc_val, prob_val, speed_val, state_val, tocharge_val, chargers_nearby, nearest_evse_id, nearest_evses, charging_decision_time) VALUES';
+	//			point l_4326 <- point(CRS_transform(EVs[0].location, "EPSG:4326"));
+	//			float latitude <- l_4326.y;
+	//			float longitude <- l_4326.x;
+	//			string
+	//			valq_info <- "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[0].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[0].SOC, 3) + ", " + with_precision(EVs[0].prob_charging, 3) + ", " + with_precision(EVs[0].veh_speed, 1) + ", '" + EVs[0].state + "', " + EVs[0].to_charge + ", '" + EVs[0].chargers_onpath + "', '" + EVs[0].nearest_evse + "', '" + EVs[0].nearest_evses + "', '" + string(EVs[0].charging_decision_time) + "')";
+	//			if (length(EVs) > 1) {
+	//				loop jj from: 1 to: length(EVs) - 1 {
+	//					l_4326 <- point(CRS_transform(EVs[jj].location, "EPSG:4326"));
+	//					latitude <- l_4326.y;
+	//					longitude <- l_4326.x;
+	//					valq_info <-
+	//					valq_info + ", " + "('" + string(current_date) + "'," + analysis_id + ", '" + EVs[jj].veh_ID + "', " + latitude + ", " + longitude + ", " + with_precision(EVs[jj].SOC, 3) + ", " + with_precision(EVs[jj].prob_charging, 3) + ", " + with_precision(EVs[jj].veh_speed, 1) + ", '" + EVs[jj].state + "', " + EVs[jj].to_charge + ", '" + EVs[jj].chargers_onpath + "', '" + EVs[jj].nearest_evse + "', '" + EVs[jj].nearest_evses + "', '" + string(EVs[jj].charging_decision_time) + "')";
+	//				}
+	//
+	//			}
+	//
+	//			info_query <- info_query + valq_info;
+	//			do executeUpdate params: DBPARAMS updateComm: info_query;
+	//		}
+	//
+	//	}
 	///////////////////////////////////////////
 	// Let the simulation go on untill all the agents die
 	///////////////////////////////////////////
@@ -333,7 +330,6 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 	list<float> cs_dists;
 	list<charging_station> chargers_nearby <- [];
 	charging_station next_nearest_evse;
-	
 	charging_station nearest_evse <- nil;
 	point snap_point;
 
@@ -348,7 +344,8 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		} else if (connector_code = 4) {
 			compat_chargers <- all_chargers;
 		}
-plot_compat_chargers <- compat_chargers;
+
+		plot_compat_chargers <- compat_chargers;
 		// Find the shortest path on the graph between the EV and the target, 
 		// this should happen only once when the trip starts and then the vehicle will traverse on this path	
 		shortest_path <- path_between(road_network_driving, self, the_target);
@@ -396,6 +393,13 @@ plot_compat_chargers <- compat_chargers;
 			remaining_range <- remaining_range - dist_in_miles;
 			distance_travelled <- distance_travelled + dist_in_miles;
 			// dist_dest <- (trip_distance - distance_travelled) / 0.000621371; // this is dist to dest in m
+			// using topology(road_network_driving) {
+			float ratio <- (distance_travelled + dist * 0.000621371) / trip_distance;
+			write (ratio);
+			next_point <- point(points_along(shortest_path.shape, [ratio]));
+			path_travelled <- path_between(topology(road_network_driving), location, next_point);
+			// }
+
 		}
 
 	}
@@ -447,16 +451,19 @@ plot_compat_chargers <- compat_chargers;
 		if (length(chargers_onpath) = 0) {
 			nearest_evse <- nil;
 		} else {
-	//	using topology(road_network_driving) {
+		//	using topology(road_network_driving) {
 		// Find the charger closest to the current location
 			nearest_evse <- chargers_onpath closest_to location;
 			// nearest_evses <- chargers_onpath closest_to (location, 2);
-			ask nearest_evse {
-				myself.chargers_nearby <- myself.chargers_onpath at_distance (2 * myself.dist);
-			}
-			
+//			ask nearest_evse {
+//				using topology(road_network_driving) {
+//					myself.chargers_nearby <-  myself.chargers_onpath at_distance (2 * myself.dist);
+//				}
+//
+//			}
+            chargers_nearby <- (chargers_onpath overlapping (path_travelled.shape + lookup_distance));
 			next_nearest_evse <- (chargers_onpath - chargers_nearby - nearest_evse) closest_to location;
-	//	}
+			//	}
 			// write (nearest_evses);
 		}
 
@@ -507,10 +514,13 @@ plot_compat_chargers <- compat_chargers;
 			if (min(cs_dists) <= dist) {
 				using topology(road_network_driving) {
 					if (next_nearest_evse != nil) {
-					//					write ("In if");code 
+						write ("In if");
 						// list<charging_station> other_evse <- nearest_evses - [nearest_evse];
 						float dist_next_charger <- with_precision(distance_to(self, next_nearest_evse), 1);
 						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						write ("dist_next_charger: " + dist_next_charger);
+						write ("dist_dest: " + dist_dest);
+						write ("remaining_range: " + remaining_range);
 						if (remaining_range * 0.95 / 0.000621371 < dist_dest) {
 							if (remaining_range * 0.95 / 0.000621371 < dist_next_charger) {
 								must_charge_now <- true;
@@ -522,6 +532,9 @@ plot_compat_chargers <- compat_chargers;
 
 					} else {
 						float dist_dest <- with_precision(distance_to(self, the_target), 1);
+						write ("In else");
+						write ("dist_dest: " + dist_dest);
+						write ("remaining_range: " + remaining_range);
 						if (0.95 * remaining_range / 0.000621371 < dist_dest) {
 							must_charge_now <- true;
 						} else {
@@ -532,22 +545,28 @@ plot_compat_chargers <- compat_chargers;
 
 				}
 
+				write ("dont_charge_now: " + dont_charge_now);
+				write ("must_charge_now: " + must_charge_now);
 				if (dont_charge_now = false) {
 				// always charge if you cant make it to the destination or the next station
-					if (must_charge_now = true) {
+					if (must_charge_now = true and SOC < SOC_MAX) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
+						write ("path - 1");
 					} else if (SOC <= MIN_SOC_CHARGING and charging_decision_time = date(1, 1, 1)) { //and charging_decision_time = date(1, 1, 1)
 					// Further only think about charging if SOC <= MIN_SOC_CHARGING - 
 					// this is the deterministic SOC-based charging choice to avoid high SOC charging
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
+						write ("path - 2");
 					} else if (SOC <= MIN_SOC_CHARGING and (current_date - charging_decision_time) / 60 >= reconsider_charging_time) {
 						to_charge <- charge_makes_sense();
 						charging_decision_time <- current_date;
+						write ("path - 3");
 					} else if (SOC <= MAX_SOC_CHARGING) {
 						to_charge <- true;
 						charging_decision_time <- current_date;
+						write ("path - 4");
 					} } } }
 
 					// It is time to rest, if we have reached our destination
@@ -556,7 +575,7 @@ plot_compat_chargers <- compat_chargers;
 		// It is time to charge if charge 'makes sense'
 		transition to: drive_to_charger when: (to_charge = true and nearest_evse != nil) {
 			charger_target <- point(pts_on_path closest_to nearest_evse.location);
-			charging_decision_time <- date(1, 1, 1); 
+			charging_decision_time <- date(1, 1, 1);
 			must_charge_now <- false; // reset to origin, as otherwise this causes infinite loop at chargers
 		}
 
@@ -601,8 +620,8 @@ plot_compat_chargers <- compat_chargers;
 			} else {
 				if (next_nearest_evse != nil) {
 				//					write ("In if");
-					// list<charging_station> other_evse <- nearest_evses - [nearest_evse];
-					// write(other_evse);
+				// list<charging_station> other_evse <- nearest_evses - [nearest_evse];
+				// write(other_evse);
 					float dist_next_charger <- with_precision(distance_between(topology(road_network_driving), [self, next_nearest_evse]), 1);
 					if (dist_next_charger > BLOCK_SIZE or dist_next_charger > remaining_range / 0.000621371) {
 						goto_wait <- true;
@@ -635,6 +654,7 @@ plot_compat_chargers <- compat_chargers;
 		transition to: drive_to_charger when: relocate_nearby = true {
 			charger_target <- point(pts_on_path closest_to nearest_evse.location);
 		}
+
 	}
 
 	///////////////////////////////////////////
@@ -787,13 +807,10 @@ plot_compat_chargers <- compat_chargers;
 		path path_to_cs;
 		int amenity_restroom <- 1; // al charging stations have restrooms, ** this assumption needs validation **
 		int amenity_more;
-		
 		do search_charger;
-		
-		
 		if (nearest_evse != nil) {
-			
-			// Talk to the nearest EVSE to find out VSE specific parameters
+
+		// Talk to the nearest EVSE to find out VSE specific parameters
 			ask nearest_evse {
 				charging_time <- (80 - myself.SOC) * myself.capacity / 100 / self.max_power; // energy used / power = time
 				if (self.dcfc_var_parking_price_unit = "min") {
@@ -876,13 +893,12 @@ experiment no_gui_exp {
 
 }
 
-
 experiment gui_exp {
 
 // Define parameters here if necessary
 // parameter "My parameter" category: "My parameters" var: one_global_attribute;
-	// float seed <- 123.0;
-	
+// float seed <- 123.0;
+	float seed <- float(aidm[0, 1]) parameter: true;
 	parameter var: analysis_id name: "analysis_id" category: "My parameters";
 	// parameter var: seed name: "seed" category: "My parameters";
 	parameter var: db_host name: "db_host" category: "My parameters";
@@ -892,14 +908,14 @@ experiment gui_exp {
 	parameter var: db_user name: "db_user" category: "My parameters";
 	parameter var: db_pwd name: "db_pwd" category: "My parameters";
 	// Define attributes, actions, a init section and behaviors if necessary
-	
-//	 reflex getseed {
-//        ask simulations {write seed;}
-//    } 
-//	init { 
-//		create simulation with:[seed::seedValue];
-//		
-//	}
+
+	//	 reflex getseed {
+	//        ask simulations {write seed;}
+	//    } 
+	//	init { 
+	//		create simulation with:[seed::seedValue];
+	//		
+	//	}
 	output {
 		display WA_network type: opengl {
 			species road aspect: geom refresh: false;
@@ -923,11 +939,12 @@ experiment gui_exp {
 					draw string(int(plot_chargers_nearby[jj])) at: plot_chargers_nearby[jj].location size: 1 #m color: #black;
 				}
 
-                
 				draw geometry(plot_shortest_path.segments) color: #green width: 4;
 				draw geometry(my_path) color: #blue width: 50;
 				// draw circle(1100) color: #yellow at: plot_chargers_nearby[0].location;
 				draw geometry(plot_my_circle) color: #darkorange empty: true width: 10;
+				draw triangle(2000) color: #blue at: next_point;
+				draw geometry(path_travelled.shape) color: #blue width: 5;
 				// draw string(int(nearest_evse)) at: nearest_evse.location size: 5#m color: #black;
 
 				//                loop rr from: 0 to: length(cpts_on_path) - 1 {
