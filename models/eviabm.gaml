@@ -48,10 +48,10 @@ global skills: [SQLSKILL] {
 	string start_time_file <- "../results/logs/simulation_time_" + simulation_date + "_" + string(cd, 'yyyy-MM-dd-HH-mm-ss') + ".csv";
 
 	// DB queries 
+	//  string
+	// bevse_query <- 'SELECT dcfc_count, ev_network, longitude, latitude, ev_connector_types, bevse_id, connector_code, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price, zip FROM built_evse where dcfc_count >= 1;';
 	string
-	bevse_query <- 'SELECT dcfc_count, ev_network, longitude, latitude, ev_connector_types, bevse_id, connector_code, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price, zip FROM built_evse where dcfc_count >= 1;';
-	string
-	nevse_query <- 'SELECT nevse_id, longitude, latitude, connector_code, dcfc_plug_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from new_evses where dcfc_plug_count > 0 and analysis_id = ' + analysis_id;
+	evse_query <- 'SELECT evse_id, longitude, latitude, connector_code, dcfc_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from evse.evses_now' + analysis_id + ' where dcfc_count > 0';
 	string evtrip_query <- 'select e.veh_id, e.origin_zip, z1.latitude as olat, z1.longitude as olng, e.destination_zip, 
 		z2.latitude as dlat, z2.longitude as dlng, e.soc, e.trip_start_time, b.range_fe, 
 		b.capacity, b.fuel_consumption, b.connector_code
@@ -130,31 +130,31 @@ global skills: [SQLSKILL] {
 		road_network_driving <- as_edge_graph(road);
 
 		// Create charging station from built_evse
-		list<list<list>> bevses <- list<list<list>>(select(DBPARAMS, bevse_query));
-		loop ii from: 0 to: length(bevses[2]) - 1 {
-			create charging_station with:
-			[shape::to_GAMA_CRS({float(bevses[2][ii][2]), float(bevses[2][ii][3])}, 'EPSG:4326'), station_id::string(bevses[2][ii][5]), zip::int(bevses[2][ii][13]), dcfc_plug_count::int(bevses[2][ii][0]), ev_network::bevses[2][ii][1], ev_connector_types::bevses[2][ii][4], ev_connector_code::int(bevses[2][ii][6]), dcfc_fixed_charging_price::float(bevses[2][ii][7]), dcfc_var_charging_price_unit::string(bevses[2][ii][8]), dcfc_var_charging_price::float(bevses[2][ii][9]), dcfc_fixed_parking_price::float(bevses[2][ii][10]), dcfc_var_parking_price_unit::string(bevses[2][ii][11]), dcfc_var_parking_price::float(bevses[2][ii][12])];
-		}
-
-		write ("Built charging stations created");
+//		list<list<list>> bevses <- list<list<list>>(select(DBPARAMS, bevse_query));
+//		loop ii from: 0 to: length(bevses[2]) - 1 {
+//			create charging_station with:
+//			[shape::to_GAMA_CRS({float(bevses[2][ii][2]), float(bevses[2][ii][3])}, 'EPSG:4326'), station_id::string(bevses[2][ii][5]), zip::int(bevses[2][ii][13]), dcfc_plug_count::int(bevses[2][ii][0]), ev_network::bevses[2][ii][1], ev_connector_types::bevses[2][ii][4], ev_connector_code::int(bevses[2][ii][6]), dcfc_fixed_charging_price::float(bevses[2][ii][7]), dcfc_var_charging_price_unit::string(bevses[2][ii][8]), dcfc_var_charging_price::float(bevses[2][ii][9]), dcfc_fixed_parking_price::float(bevses[2][ii][10]), dcfc_var_parking_price_unit::string(bevses[2][ii][11]), dcfc_var_parking_price::float(bevses[2][ii][12])];
+//		}
+//
+//		write ("Built charging stations created");
 		// Add a prefix of b to built_evse
-		int built_evse_count <- length(charging_station);
-		loop i from: 0 to: built_evse_count - 1 {
-			charging_station[i].station_id <- "b" + charging_station[i].station_id;
-		}
+//		int built_evse_count <- length(charging_station);
+//		loop i from: 0 to: built_evse_count - 1 {
+//			charging_station[i].station_id <- "b" + charging_station[i].station_id;
+//		}
 
-		list<list<list>> nevses <- list<list<list>>(select(DBPARAMS, nevse_query));
+		list<list<list>> evses <- list<list<list>>(select(DBPARAMS, evse_query));
 		// Create charging station from new_evses
-		if (length(nevses[2]) > 0) {
-			loop ii from: 0 to: length(nevses[2]) - 1 {
+		if (length(evses[2]) > 0) {
+			loop ii from: 0 to: length(evses[2]) - 1 {
 				create charging_station with:
-				[shape::to_GAMA_CRS({float(nevses[2][ii][1]), float(nevses[2][ii][2])}, 'EPSG:4326'), station_id::string(nevses[2][ii][0]), dcfc_plug_count::int(nevses[2][ii][4]), ev_connector_code::int(nevses[2][ii][3]), dcfc_fixed_charging_price::float(nevses[2][ii][5]), dcfc_var_charging_price_unit::string(nevses[2][ii][6]), dcfc_var_charging_price::float(nevses[2][ii][7]), dcfc_fixed_parking_price::float(nevses[2][ii][8]), dcfc_var_parking_price_unit::string(nevses[2][ii][9]), dcfc_var_parking_price::float(nevses[2][ii][10])];
+				[shape::to_GAMA_CRS({float(evses[2][ii][1]), float(evses[2][ii][2])}, 'EPSG:4326'), station_id::string(evses[2][ii][0]), dcfc_plug_count::int(evses[2][ii][4]), ev_connector_code::int(evses[2][ii][3]), dcfc_fixed_charging_price::float(evses[2][ii][5]), dcfc_var_charging_price_unit::string(evses[2][ii][6]), dcfc_var_charging_price::float(evses[2][ii][7]), dcfc_fixed_parking_price::float(evses[2][ii][8]), dcfc_var_parking_price_unit::string(evses[2][ii][9]), dcfc_var_parking_price::float(evses[2][ii][10])];
 			}
 
 			// Add a prefix of n to new_evse 
-			loop i from: built_evse_count to: length(charging_station) - 1 {
-				charging_station[i].station_id <- "n" + charging_station[i].station_id;
-			}
+//			loop i from: built_evse_count to: length(charging_station) - 1 {
+//				charging_station[i].station_id <- "n" + charging_station[i].station_id;
+//			}
 
 		}
 
