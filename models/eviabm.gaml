@@ -51,7 +51,7 @@ global skills: [SQLSKILL] {
 	//  string
 	// bevse_query <- 'SELECT dcfc_count, ev_network, longitude, latitude, ev_connector_types, bevse_id, connector_code, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price, zip FROM built_evse where dcfc_count >= 1;';
 	string
-	evse_query <- 'SELECT evse_id, longitude, latitude, connector_code, dcfc_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from evse.evses_now' + analysis_id + ' where dcfc_count > 0';
+	evse_query <- 'SELECT evse_id, longitude, latitude, connector_code, dcfc_count, dcfc_fixed_charging_price, dcfc_var_charging_price_unit, dcfc_var_charging_price, dcfc_fixed_parking_price, dcfc_var_parking_price_unit, dcfc_var_parking_price from evses_now where analysis_id = ' + analysis_id + ' and dcfc_count > 0 order by evse_id;';
 	string evtrip_query <- 'select e.veh_id, e.origin_zip, z1.latitude as olat, z1.longitude as olng, e.destination_zip, 
 		z2.latitude as dlat, z2.longitude as dlng, e.soc, e.trip_start_time, b.range_fe, 
 		b.capacity, b.fuel_consumption, b.connector_code
