@@ -44,7 +44,7 @@ global skills: [SQLSKILL] {
 	float lookup_distance <- 10 / 0.000621371; // convert miles to m - this is the distance from the road that one looks for charging stations
 	float reconsider_charging_time <- 10.0; // Time in minutes to reconsider charging decision
 	// files
-	file roads_shapefile <- file("../includes/SpatialJoin/WA_roads_4326.shp"); // WA state shapefile, with road speed limit, major roads only - transformed to EPSG:4326 in QGIS
+	file roads_shapefile <- file("../includes/SpatialJoin/wa_roads_ferries.shp"); // WA state shapefile, with road speed limit, major roads only - transformed to EPSG:4326 in QGIS
 	string start_time_file <- "../results/logs/simulation_time_" + simulation_date + "_" + string(cd, 'yyyy-MM-dd-HH-mm-ss') + ".csv";
 
 	// DB queries 
@@ -116,7 +116,7 @@ global skills: [SQLSKILL] {
 
 		// Create roads from the shapefile 
 		// Reading attributes 'Spd' and 'ID', to add more attributes, go to R, or QGIS		
-		create road from: roads_shapefile with: [maxspeed::float(read('spd')) #miles / #hour, road_ID::int(read('id'))];
+		create road from: roads_shapefile with: [maxspeed::float(read('spd')) #miles / #hour, road_ID::int(read('id')), evdist::float(read('evdist')) #miles];
 		write ("Roads created");
 		// create a list of roads - this is needed for finding the current road etc.
 		roadsList <- (road as list);
@@ -125,10 +125,11 @@ global skills: [SQLSKILL] {
 		road_network <- as_edge_graph(road);
 
 		// Add time to travel as weights to the map
-		map<road, float> map_weights <- road as_map (each::each.shape.perimeter / each.maxspeed);
+		map<road, float> map_weights <- road as_map (each::each.evdist / each.maxspeed);
+		map<road, float> dist_weights <- road as_map (each::each.evdist);
 		road_network_weighted <- copy(road_network) with_weights map_weights;
-		road_network_driving <- as_edge_graph(road);
-
+		road_network_driving <- as_edge_graph(road) with_weights dist_weights;
+        road_network_driving <- road_network_driving with_optimizer_type 'Dijkstra'; // use this as some weights maybe zero as per https://groups.google.com/g/gama-platform/c/AkLRsC6GxMk/m/gkpo63oKAQAJ 
 		// Create charging station from built_evse
 //		list<list<list>> bevses <- list<list<list>>(select(DBPARAMS, bevse_query));
 //		loop ii from: 0 to: length(bevses[2]) - 1 {
@@ -257,6 +258,7 @@ global skills: [SQLSKILL] {
 species road schedules: [] {
 	geometry display_shape <- line(shape.points, 2.0);
 	float maxspeed;
+	float evdist;
 	int road_ID;
 	rgb road_color <- #red;
 
@@ -339,7 +341,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 		// Get a list of points on path
 		pts_on_path <- geometry(shortest_path.segments) points_on (10);
 		location <- pts_on_path closest_to (self);
-		trip_distance <- shortest_path.shape.perimeter * 0.000621371;
+		trip_distance <- shortest_path.weight;
 
 		// Find the chargers that are within the 'lookup_distance' of the path. 
 		// This isnt the 'on road' distance to the charging station, but just a buffer around the path 
