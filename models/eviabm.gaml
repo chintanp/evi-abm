@@ -59,7 +59,7 @@ global skills: [SQLSKILL] {
 	inner join zipcode_record z1 on cast(e.origin_zip as text) = z1.zip
 	inner join zipcode_record z2 on cast(e.destination_zip as text) = z2.zip
 	inner join wa_bevs b on e.veh_id = b.veh_id
-	where e.analysis_id =' + analysis_id + ' order by e.veh_id::int';
+	where e.analysis_id =' + analysis_id + ' order by e.veh_id;';
 	string param_query <- "select ap.param_id, param_name, ap.param_value from analysis_params ap
 							join sim_params sp on sp.param_id = ap.param_id
 							where ap.analysis_id = " + analysis_id + " and sp.param_type IN ('global', 'eviabm') 
@@ -345,7 +345,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 
 		// Find the chargers that are within the 'lookup_distance' of the path. 
 		// This isnt the 'on road' distance to the charging station, but just a buffer around the path 
-		chargers_onpath <- (compat_chargers overlapping (shortest_path.shape + lookup_distance));
+		chargers_onpath <- (compat_chargers overlapping (shortest_path.shape + lookup_distance)) sort_by (each.station_id);
 		if (empty(chargers_onpath)) {
 		} else {
 			loop cs over: chargers_onpath {

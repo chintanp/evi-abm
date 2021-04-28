@@ -337,7 +337,9 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			compat_chargers <- all_chargers;
 		}
 		plot_compat_chargers <- compat_chargers;
-
+        write(compat_chargers);
+        compat_chargers <- compat_chargers sort_by (each.station_id);
+        write(compat_chargers);
 		// Find the shortest path on the graph between the EV and the target, 
 		// this should happen only once when the trip starts and then the vehicle will traverse on this path	
 		shortest_path <- path_between(road_network_driving, self, the_target);
