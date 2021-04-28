@@ -809,7 +809,7 @@ species EVs skills: [moving, SQLSKILL] control: fsm {
 			float
 			u_charging <- intercept + (c_soc * soc) + (c_dev * dev) + (c_time_in_car * time_in_car) + (c_charging_cost * charging_cost_in_dollar) + (c_charging_time * charging_time) + (c_access_time * access_time) + (c_amenity_restroom * amenity_restroom) + (c_amenity_more * amenity_more);
 			float odds_charging <- exp(u_charging);
-			prob_charging <- odds_charging / (1 + odds_charging);
+			prob_charging <- with_precision((odds_charging / (1 + odds_charging)), 2);
 			// set the seed every time to ensure repeatability
 			// seed <- float(params[2][0][2]);
 			// Make a random draw using the probability from a binomial distribution					
